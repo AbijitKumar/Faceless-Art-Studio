@@ -11,7 +11,11 @@ output/voiceovers/*
 output/subtitles/*
 output/videos/*
 
+# Input media
+input/*
+
 # Keep directory structure
 !output/voiceovers/.gitkeep
 !output/subtitles/.gitkeep
 !output/videos/.gitkeep
+!input/.gitkeep
