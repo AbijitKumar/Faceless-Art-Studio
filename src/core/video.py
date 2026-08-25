@@ -6,16 +6,16 @@ from src.utils.ffmpeg import run_ffmpeg
 def render_vertical_video(
     video_path: Path,
     audio_path: Path,
-    srt_path: Path,
+    caption_path: Path,
     output_path: Path,
 ):
     # Convert the Windows subtitle path into a format FFmpeg's
     # subtitles filter can safely understand.
-    subtitle_path = srt_path.resolve().as_posix()
-    subtitle_path = subtitle_path.replace(":", r"\:")
-    subtitle_path = subtitle_path.replace("'", r"\'")
+    caption_path = caption_path.resolve().as_posix()
+    caption_path = caption_path.replace(":", r"\:")
+    caption_path = caption_path.replace("'", r"\'")
 
-    subtitle_filter = f"subtitles='{subtitle_path}'"
+    caption_filter = f"subtitles='{caption_path}'"
 
     args = [
         "-stream_loop",
@@ -27,7 +27,7 @@ def render_vertical_video(
         "-vf",
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        + subtitle_filter,
+        + caption_filter,
         "-map",
         "0:v:0",
         "-map",

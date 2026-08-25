@@ -100,4 +100,7 @@ def generate_srt(
 
             srt.write(f"{entry['text']}\n\n")
 
-    return output_path
+    return {
+        "srt": output_path,
+        "words": entries,
+    }

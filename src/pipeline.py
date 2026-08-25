@@ -2,6 +2,7 @@ from pathlib import Path
 
 from src.core.tts import generate_voice_sync
 from src.core.subtitles import generate_srt
+from src.core.caption import generate_ass
 from src.core.video import render_vertical_video
 from src.utils.files import ensure_output_dirs, read_text, create_job_id
 
@@ -25,16 +26,32 @@ def run_pipeline(
 
     voiceover = paths["voiceovers"] / f"{job_id}.wav"
     subtitles = paths["subtitles"] / f"{job_id}.srt"
+    captions = paths["subtitles"] / f"{job_id}.ass"
     final_video = paths["videos"] / f"{job_id}.mp4"
 
     print("[1/3] Generating voice-over...")
     generate_voice_sync(text, voiceover, voice)
 
     print("[2/3] Transcribing voice-over and creating SRT...")
-    generate_srt(voiceover, subtitles, whisper_model, language)
+    subtitle_result = generate_srt(
+    voiceover,
+    subtitles,
+    whisper_model,
+    language,
+    )
+
+    generate_ass(
+        subtitle_result["words"],
+        captions,
+    )
 
     print("[3/3] Rendering final vertical video...")
-    render_vertical_video(video_path, voiceover, subtitles, final_video)
+    render_vertical_video(
+    video_path,
+    voiceover,
+    captions,
+    final_video,
+)
 
     return {
         "job_id": job_id,
