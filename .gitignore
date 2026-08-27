@@ -19,3 +19,8 @@ input/*
 !output/subtitles/.gitkeep
 !output/videos/.gitkeep
 !input/.gitkeep
+
+# Node modules
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
