@@ -13,6 +13,8 @@ export interface Project {
   subtitlesPath?: string | null;
   topic?: string | null;
   resolution?: string | null;
+  sourceVideo?: string | null;
+  error?: string | null;
 }
 
 const STORAGE_KEY = "faceless_art_studio_projects";
@@ -51,7 +53,10 @@ class ProjectStore {
       subtitlesPath: data.subtitlesPath ?? null,
       topic: data.topic ?? null,
       resolution: data.resolution ?? "1080p",
+      sourceVideo: data.sourceVideo ?? null,
+      error: data.error ?? null,
     };
+
 
     const updated = [newProject, ...projects];
     this.save(updated);

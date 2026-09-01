@@ -3,9 +3,11 @@ import {
   Activity, Bell, ChevronDown, Clock3, FolderKanban, HardDrive,
   HelpCircle, Image, LayoutDashboard, LayoutTemplate, Plus,
   Search, Settings, Sparkles, Upload, Video, CheckCircle2,
-  MoreVertical, X, FileVideo, Clock, ChevronRight, ArrowUpDown
+  MoreVertical, X, FileVideo, Clock, ChevronRight, ArrowUpDown,
+  Download, Menu
 } from "lucide-react";
 import { Project, ProjectStatus, projectStore, useProjects } from "./projectStore";
+import { EditorPage } from "./EditorPage";
 
 type Page = "dashboard" | "projects" | "editor" | "templates" | "media" | "settings" | "help";
 
@@ -165,6 +167,8 @@ function NotifDropdown() {
 // ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [now, setNow] = useState(Date.now());
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -199,33 +203,67 @@ function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside ref={sidebarRef} className={`sidebar ${sidebarExpanded ? "expanded" : ""}`}>
         <div className="brand">
-          <div className="brand-mark"><Video size={19}/></div>
-          <div><b>Faceless Art</b><span>Studio</span></div>
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarExpanded((v) => !v)}
+            aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            title={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            <Menu size={18} />
+          </button>
+          <div className="brand-mark" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
+            <Video size={19} />
+          </div>
+          {sidebarExpanded && (
+            <div className="brand-text">
+              <b>Faceless Art</b>
+              <span>Studio</span>
+            </div>
+          )}
         </div>
         <section className="nav-section">
-          <small>WORKSPACE</small>
+          {sidebarExpanded && <small>WORKSPACE</small>}
           {nav.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => go(id)}
-              className={`nav-item ${page === id ? "active" : ""} ${id === "editor" ? "create" : ""}`}>
-              <Icon size={19}/><span>{label}</span>
+            <button
+              key={id}
+              onClick={() => go(id)}
+              title={label}
+              className={`nav-item ${page === id ? "active" : ""} ${id === "editor" ? "create" : ""}`}
+            >
+              <Icon size={19} />
+              {sidebarExpanded && <span>{label}</span>}
             </button>
           ))}
         </section>
         <section className="nav-section system">
-          <small>SYSTEM</small>
-          <button onClick={() => go("settings")} className={`nav-item ${page === "settings" ? "active" : ""}`}>
-            <Settings size={19}/><span>Settings</span>
+          {sidebarExpanded && <small>SYSTEM</small>}
+          <button
+            onClick={() => go("settings")}
+            title="Settings"
+            className={`nav-item ${page === "settings" ? "active" : ""}`}
+          >
+            <Settings size={19} />
+            {sidebarExpanded && <span>Settings</span>}
           </button>
-          <button onClick={() => go("help")} className={`nav-item ${page === "help" ? "active" : ""}`}>
-            <HelpCircle size={19}/><span>Help</span>
+          <button
+            onClick={() => go("help")}
+            title="Help"
+            className={`nav-item ${page === "help" ? "active" : ""}`}
+          >
+            <HelpCircle size={19} />
+            {sidebarExpanded && <span>Help</span>}
           </button>
         </section>
-        <div className="profile">
+        <div className="profile" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
           <div className="avatar">A</div>
-          <div><b>Your Studio</b><span>Personal workspace</span></div>
-          <ChevronDown size={16}/>
+          {sidebarExpanded && (
+            <>
+              <div><b>Your Studio</b><span>Personal workspace</span></div>
+              <ChevronDown size={16} />
+            </>
+          )}
         </div>
       </aside>
 
@@ -265,6 +303,8 @@ function App() {
           ? <Dashboard onNavigate={go} />
           : page === "projects"
           ? <ProjectsPage onNavigate={go} />
+          : page === "editor"
+          ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} />
           : <ProgressPage page={page} onBack={() => go("dashboard")} />}
       </div>
     </div>
@@ -587,7 +627,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
       ) : (
         <div className="prj-grid">
           {visible.map((project) => (
-            <article key={project.id} className="prj-card">
+            <article key={project.id} className={`prj-card ${menuOpen === project.id ? "menu-active" : ""}`}>
               {/* Thumbnail */}
               <div
                 className="prj-thumb"
@@ -685,21 +725,38 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                   <div className="prj-info-row"><span>Status</span><b>{statusLabel(selected.status)}</b></div>
                   <div className="prj-info-row"><span>Created</span><b>{new Date(selected.createdAt).toLocaleString()}</b></div>
                   <div className="prj-info-row"><span>Duration</span><b>{selected.duration || "Not rendered"}</b></div>
+                  {selected.sourceVideo && <div className="prj-info-row"><span>Source Video</span><b>{selected.sourceVideo}</b></div>}
                   {selected.topic && <div className="prj-info-row"><span>Topic</span><b>{selected.topic}</b></div>}
-                  {selected.videoPath && <div className="prj-info-row"><span>Video Path</span><b style={{wordBreak:"break-all",fontSize:10}}>{selected.videoPath}</b></div>}
+                  {selected.error && <div className="prj-info-row"><span>Error</span><b style={{color:"#f06a6a",fontSize:11}}>{selected.error}</b></div>}
+                  {selected.videoPath && <div className="prj-info-row"><span>Video URL</span><b style={{wordBreak:"break-all",fontSize:10}}>{selected.videoPath}</b></div>}
                 </div>
               </div>
             </div>
             <div className="prj-modal-footer">
               <div className="prj-modal-actions">
                 <button className="secondary" onClick={() => setSelected(null)}>Close</button>
-                <button className="primary" onClick={() => { setSelected(null); onNavigate("editor"); }}>
+                {selected.videoPath && selected.status === "completed" && (() => {
+                  const filename = selected.videoPath.split("/").pop() || `${selected.id}.mp4`;
+                  const safeTitle = (selected.title || "faceless-video").replace(/[\\/*?:"<>|]/g, "_");
+                  return (
+                    <a
+                      href={`/api/download/${filename}?title=${encodeURIComponent(safeTitle)}`}
+                      download={`${safeTitle}.mp4`}
+                      className="primary"
+                      style={{ textDecoration: "none" }}
+                    >
+                      <Download size={15} /> Download Video
+                    </a>
+                  );
+                })()}
+                <button className="secondary" onClick={() => { setSelected(null); onNavigate("editor"); }}>
                   <Plus size={15}/> Create New Video
                 </button>
               </div>
             </div>
           </div>
         </div>
+
       )}
     </main>
   );
