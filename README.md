@@ -8,7 +8,7 @@ The project began as a terminal-first Python media pipeline and has now evolved 
 
 ---
 
-## ✨ Current Version
+## Current Version
 
 **v1.3.0 — Video Generator + Web Video Editor**
 
@@ -122,7 +122,7 @@ This release introduces the first complete web-based video-generation workflow.
 
 ---
 
-# 🎙️ AI Voice Generation
+# AI Voice Generation
 
 Faceless Art Studio uses **Edge TTS** for AI voice generation.
 
@@ -168,7 +168,7 @@ The original source-video audio is intentionally excluded from the final render.
 
 ---
 
-# 📝 Intelligent Captions
+# Intelligent Captions
 
 Captions are generated from the actual generated voice-over rather than simply displaying the original script.
 
@@ -228,7 +228,7 @@ Caption size can be adjusted from:
 
 ---
 
-# 🎬 Video Processing
+# Video Processing
 
 FFmpeg is responsible for the final media-processing stage.
 
@@ -265,7 +265,7 @@ The final result therefore remains synchronized with the generated voice.
 
 ---
 
-# 🖥️ Web Video Editor
+# Web Video Editor
 
 The v1.3.0 release introduces a complete working browser-based Video Editor.
 
@@ -297,7 +297,7 @@ Start the application locally and open the web interface to access the editor.
 
 ---
 
-# 📂 Project Management
+# Project Management
 
 Generated videos are tracked inside **My Projects**.
 
@@ -329,7 +329,7 @@ My First AI Reel.mp4
 
 ---
 
-# 🗂️ Project Structure
+# Project Structure
 
 ```text
 Faceless-Art-Studio-v1/
@@ -387,7 +387,7 @@ Faceless-Art-Studio-v1/
 
 ---
 
-# 🧠 Architecture
+# Architecture
 
 Faceless Art Studio is designed around a shared media-processing core.
 
@@ -418,7 +418,7 @@ This avoids maintaining separate implementations for CLI and web-based generatio
 
 ---
 
-# 🌐 Backend API
+# Backend API
 
 The local backend runs on:
 
@@ -470,7 +470,7 @@ The download endpoint supports the project title as the user-facing filename whi
 
 ---
 
-# 💻 Technology Stack
+# Technology Stack
 
 ## Backend
 
@@ -497,7 +497,7 @@ The download endpoint supports the project title as the user-facing filename whi
 
 ---
 
-# ⚙️ Requirements
+# Requirements
 
 ## Python
 
@@ -532,7 +532,7 @@ FFmpeg must be available through the system PATH.
 
 ---
 
-# 📦 Installation
+# Installation
 
 Clone the repository:
 
@@ -573,7 +573,7 @@ cd ..
 
 ---
 
-# ▶️ Running the Web Application
+# Running the Web Application
 
 The web application uses two local processes.
 
@@ -612,7 +612,7 @@ Open the displayed URL in your browser.
 
 ---
 
-# 🖥️ Running the Original CLI Pipeline
+# Running the Original CLI Pipeline
 
 The original terminal workflow remains available.
 
@@ -648,7 +648,7 @@ output/
 
 ---
 
-# 🎯 Example CLI Workflow
+# Example CLI Workflow
 
 ```bash
 python main.py \
@@ -678,7 +678,7 @@ Vertical MP4
 
 ---
 
-# 🔊 Audio Design
+# Audio Design
 
 The final generated video intentionally does not retain the source video's original audio.
 
@@ -701,7 +701,7 @@ Once generation is complete, the generated MP4 can be previewed with its AI narr
 
 ---
 
-# 🧪 Verification
+# Verification
 
 The v1.3.0 implementation has been tested through both the terminal pipeline and the web API.
 
@@ -827,7 +827,7 @@ If timing problems occur, verify that the generated voice-over itself is valid a
 
 ---
 
-# 🔐 Output & Git Hygiene
+# Output & Git Hygiene
 
 Generated media can become large very quickly.
 
@@ -847,7 +847,7 @@ Source videos placed in `input/` should also generally remain local unless they 
 
 ---
 
-# 🏷️ Version History
+# Version History
 
 ## v1.3.0 — Video Generator + Web Editor
 
@@ -893,7 +893,7 @@ Download endpoint:    PASS
 
 ---
 
-# 🗺️ Roadmap
+# Roadmap
 
 The project is intentionally being developed incrementally.
 
@@ -976,7 +976,7 @@ TikTok
 
 ---
 
-# 🧩 Development Philosophy
+# Development Philosophy
 
 Faceless Art Studio is being developed as a modular system rather than a single monolithic application.
 
@@ -1027,7 +1027,7 @@ Future architecture can therefore grow toward:
 
 ---
 
-# 🤝 Contributing
+# Contributing
 
 Development is currently focused on building the core product incrementally.
 
@@ -1053,13 +1053,13 @@ Backend verification should include a real generation test whenever media-proces
 
 ---
 
-# 📄 License
+# License
 
 See the `LICENSE` file included in this repository.
 
 ---
 
-# 👨‍💻 Project Status
+#  Project Status
 
 **Current status: Active development**
 
