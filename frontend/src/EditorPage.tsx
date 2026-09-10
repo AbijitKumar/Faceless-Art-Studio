@@ -39,10 +39,12 @@ import {
   Voice,
 } from "./editorApi";
 import { projectStore } from "./projectStore";
+import { TemplateConfig } from "./templates";
 
-interface EditorPageProps {
+export interface EditorPageProps {
   onBack: () => void;
   onNavigateProjects: () => void;
+  initialTemplate?: TemplateConfig | null;
 }
 
 const PRESET_OPTIONS = [
@@ -65,13 +67,17 @@ const FONT_OPTIONS = [
 const DEFAULT_SCRIPT =
   "AI is dramatically simple. Turn your ideas into high-impact faceless videos in seconds.";
 
-export function EditorPage({ onBack, onNavigateProjects }: EditorPageProps) {
+export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: EditorPageProps) {
   // ── Project Metadata ────────────────────────────────────────────────────────
-  const [projectTitle, setProjectTitle] = useState("My Faceless Video");
+  const [projectTitle, setProjectTitle] = useState(
+    initialTemplate ? `${initialTemplate.name} Reel` : "My Faceless Video"
+  );
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   // ── Script State (Primary First Screen) ─────────────────────────────────────
-  const [scriptText, setScriptText] = useState(DEFAULT_SCRIPT);
+  const [scriptText, setScriptText] = useState(
+    initialTemplate?.sampleScript || DEFAULT_SCRIPT
+  );
   const [isDraggingTxt, setIsDraggingTxt] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +90,9 @@ export function EditorPage({ onBack, onNavigateProjects }: EditorPageProps) {
 
   // ── Voice State ─────────────────────────────────────────────────────────────
   const [voices, setVoices] = useState<Voice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural");
+  const [selectedVoice, setSelectedVoice] = useState(
+    initialTemplate?.recommendedVoice || "en-US-AriaNeural"
+  );
   const [voiceLocaleFilter, setVoiceLocaleFilter] = useState("en-US");
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
@@ -92,20 +100,28 @@ export function EditorPage({ onBack, onNavigateProjects }: EditorPageProps) {
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [captionPreset, setCaptionPreset] = useState<
     "bold" | "neon" | "classic" | "minimal" | "karaoke" | "creator"
-  >("bold");
-  const [fontName, setFontName] = useState("Manrope");
-  const [captionSizeScale, setCaptionSizeScale] = useState(100); // 50 to 200 percent
+  >(initialTemplate?.captionPreset || "bold");
+  const [fontName, setFontName] = useState(initialTemplate?.fontName || "Manrope");
+  const [captionSizeScale, setCaptionSizeScale] = useState(initialTemplate?.captionSizeScale || 100); // 50 to 200 percent
   const [primaryColor, setPrimaryColor] = useState("#FFFFFF");
   const [highlightColor, setHighlightColor] = useState("#FFDC28");
   const [outlineColor, setOutlineColor] = useState("#000000");
-  const [alignment, setAlignment] = useState<2 | 5 | 8>(2); // 2: bottom, 5: center, 8: top
-  const [captionPosition, setCaptionPosition] = useState<"bottom" | "center" | "top">("bottom");
+  const [alignment, setAlignment] = useState<2 | 5 | 8>(
+    initialTemplate?.captionPosition === "top" ? 8 : initialTemplate?.captionPosition === "center" ? 5 : 2
+  );
+  const [captionPosition, setCaptionPosition] = useState<"bottom" | "center" | "top">(
+    initialTemplate?.captionPosition || "bottom"
+  );
   const [hasOutline, setHasOutline] = useState(true);
   const [hasShadow, setHasShadow] = useState(true);
-  const [maxWordsPerCaption, setMaxWordsPerCaption] = useState(3);
+  const [maxWordsPerCaption, setMaxWordsPerCaption] = useState(
+    initialTemplate?.maxWordsPerCaption || 3
+  );
 
   // ── Video Settings ──────────────────────────────────────────────────────────
-  const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">("9:16");
+  const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">(
+    initialTemplate?.aspectRatio || "9:16"
+  );
   const [resolution, setResolution] = useState<"720p" | "1080p" | "4K">("1080p");
 
   // ── Video Playback & Canvas State ───────────────────────────────────────────
@@ -126,6 +142,23 @@ export function EditorPage({ onBack, onNavigateProjects }: EditorPageProps) {
     video_path?: string;
     duration?: string;
   } | null>(null);
+
+  // ── Update State when initialTemplate Changes ──────────────────────────────
+  useEffect(() => {
+    if (initialTemplate) {
+      setProjectTitle(`${initialTemplate.name} Reel`);
+      setScriptText(initialTemplate.sampleScript);
+      setCaptionPreset(initialTemplate.captionPreset);
+      setCaptionPosition(initialTemplate.captionPosition);
+      setCaptionSizeScale(initialTemplate.captionSizeScale);
+      setFontName(initialTemplate.fontName);
+      setMaxWordsPerCaption(initialTemplate.maxWordsPerCaption);
+      setAspectRatio(initialTemplate.aspectRatio);
+      if (initialTemplate.recommendedVoice) {
+        setSelectedVoice(initialTemplate.recommendedVoice);
+      }
+    }
+  }, [initialTemplate]);
 
   // ── Load Voices & Random Source Video on Mount ──────────────────────────────
   useEffect(() => {

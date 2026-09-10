@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { Project, ProjectStatus, projectStore, useProjects } from "./projectStore";
 import { EditorPage } from "./EditorPage";
+import { TemplatesPage } from "./TemplatesPage";
+import { TemplateConfig } from "./templates";
 
 type Page = "dashboard" | "projects" | "editor" | "templates" | "media" | "settings" | "help";
 
@@ -167,6 +169,7 @@ function NotifDropdown() {
 // ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateConfig | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [now, setNow] = useState(Date.now());
@@ -191,7 +194,19 @@ function App() {
   useCloseOnOutsideAndEsc(searchWrapRef, searchOpen, closeSearch);
   useCloseOnOutsideAndEsc(notifWrapRef,  notifOpen,  closeNotif);
 
-  const go = (next: Page) => { setPage(next); closeSearch(); };
+  const go = (next: Page) => {
+    if (next !== "editor") {
+      // Optional: keep or reset template when explicitly clicking away
+    }
+    setPage(next);
+    closeSearch();
+  };
+
+  const handleUseTemplate = (template: TemplateConfig) => {
+    setSelectedTemplate(template);
+    setPage("editor");
+    closeSearch();
+  };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -303,8 +318,10 @@ function App() {
           ? <Dashboard onNavigate={go} />
           : page === "projects"
           ? <ProjectsPage onNavigate={go} />
+          : page === "templates"
+          ? <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
           : page === "editor"
-          ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} />
+          ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} initialTemplate={selectedTemplate} />
           : <ProgressPage page={page} onBack={() => go("dashboard")} />}
       </div>
     </div>
@@ -411,8 +428,12 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
                 <span className="qa blue"><Sparkles size={18}/></span>
                 <span><b>Create Video</b><small>Start from a script</small></span>
               </button>
+              <button onClick={() => onNavigate("templates")}>
+                <span className="qa violet"><LayoutTemplate size={18}/></span>
+                <span><b>Browse Templates</b><small>Pick a proven format</small></span>
+              </button>
               <button onClick={() => onNavigate("media")}>
-                <span className="qa violet"><Upload size={18}/></span>
+                <span className="qa"><Upload size={18}/></span>
                 <span><b>Upload Media</b><small>Add source media</small></span>
               </button>
             </div>
