@@ -3,6 +3,10 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
+.env.*
+*.env
+frontend/.env*
 .DS_Store
 Thumbs.db
 

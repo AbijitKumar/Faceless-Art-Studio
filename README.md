@@ -1,178 +1,151 @@
 # Faceless Art Studio
 
-> **AI-powered faceless short-video generation platform — from script to finished vertical video.**
+> **AI-powered faceless short-video creation — from script to finished vertical video.**
 
-Faceless Art Studio is a modular video-generation application that transforms a written script and a source video into a finished **9:16 faceless video** with AI-generated narration and synchronized animated captions.
+Faceless Art Studio is a local-first AI video creation platform designed to turn written scripts into polished **9:16 short-form videos** with AI narration, synchronized captions, source-video processing, and an integrated web editor.
 
-The project began as a terminal-first Python media pipeline and has now evolved into a working web-based Video Editor while keeping the original processing pipeline intact.
+The project started as a terminal-based Python media pipeline and has evolved into a full browser-based video creation application while preserving the underlying media-processing architecture.
 
 ---
 
-## Current Version
+## Highlights
 
-**v1.3.0 — Video Generator + Web Video Editor**
+* AI-powered vertical video generation
+* Script input and `.txt` upload
+* AI voice generation with Edge TTS
+* Faster-Whisper transcription
+* Timestamp-synchronized captions
+* Multiple caption presets and positioning options
+* 9:16 / 1080×1920 video output
+* Automatic source-video selection and looping
+* Automatic source-audio replacement
+* My Projects
+* Reusable video Templates
+* Local Media Library
+* Supabase authentication foundation
+* Application Settings
+* Built-in Help and bug-report workflow
+* React + TypeScript web interface
+* Python media-processing backend
+* FFmpeg-based rendering pipeline
 
-This release introduces the first complete web-based video-generation workflow.
+---
 
-### Current pipeline
+# Current Release
+
+## v1.7.0 — Pre-v2 Product Milestone
+
+This release represents the current **v1.x development milestone** before the planned `v2.0.0` completed application release.
+
+The application has progressed substantially beyond the original terminal pipeline and now includes a browser-based editing experience, project management, templates, media management, authentication infrastructure, settings, and help functionality.
+
+> **v2.0.0 is planned as the completed application milestone.**
+
+---
+
+# Core Workflow
 
 ```text
-                 ┌─────────────────────┐
-                 │      User Script     │
-                 │ Text / .txt Upload   │
-                 └──────────┬──────────┘
-                            │
-                            ▼
-                 ┌─────────────────────┐
-                 │   Project Settings  │
-                 │                     │
-                 │ • Project name      │
-                 │ • AI voice          │
-                 │ • Caption style     │
-                 │ • Caption position  │
-                 │ • Caption size      │
-                 └──────────┬──────────┘
-                            │
-                            ▼
-                 ┌─────────────────────┐
-                 │ Source Video Pool   │
-                 │      input/         │
-                 │                     │
-                 │ Random video        │
-                 │ selection           │
-                 └──────────┬──────────┘
-                            │
-                            ▼
-              ┌──────────────────────────┐
-              │     AI Text-to-Speech    │
-              │        Edge TTS          │
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │     Voice-over WAV      │
-              │   PCM 16-bit / 44.1kHz  │
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │    Faster-Whisper        │
-              │ Word-level timestamps    │
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │ Animated Caption Engine  │
-              │                          │
-              │ • Phrase grouping        │
-              │ • Exact timestamps       │
-              │ • Configurable size      │
-              │ • Multiple presets       │
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │       FFmpeg             │
-              │                          │
-              │ • 9:16 conversion        │
-              │ • Center crop            │
-              │ • Audio replacement      │
-              │ • Caption burn-in        │
-              │ • Duration synchronization│
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │      Final MP4 Video     │
-              │      1080 × 1920         │
-              └────────────┬─────────────┘
-                           │
-                           ▼
-              ┌──────────────────────────┐
-              │      My Projects         │
-              │                          │
-              │ • Preview                │
-              │ • Project metadata       │
-              │ • Download               │
-              │ • Project naming         │
-              └──────────────────────────┘
+                    ┌─────────────────────┐
+                    │       Script        │
+                    │ Text / .txt Upload  │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   Project Settings  │
+                    │                     │
+                    │ • Project name      │
+                    │ • AI voice          │
+                    │ • Captions          │
+                    │ • Caption position  │
+                    │ • Caption size      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   Source Video      │
+                    │   Selection / Roll  │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │      Edge TTS       │
+                    │   AI Voiceover      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   Faster-Whisper    │
+                    │ Word-level Timing   │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   Caption Engine    │
+                    │                     │
+                    │ • Phrase grouping   │
+                    │ • Timing            │
+                    │ • Presets           │
+                    │ • Position          │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │       FFmpeg        │
+                    │                     │
+                    │ • 9:16 conversion   │
+                    │ • Crop / scale      │
+                    │ • Audio replacement │
+                    │ • Caption burn-in   │
+                    │ • Duration sync    │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     Final MP4       │
+                    │    1080 × 1920      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │    My Projects      │
+                    │ Preview / Download  │
+                    └─────────────────────┘
 ```
 
 ---
 
-# 🚀 Features
+# Features
 
 ## Video Generation
 
-* Generate videos directly from written scripts.
-* Enter scripts directly into the Video Editor.
-* Drag and drop `.txt` files into the editor.
-* Automatically select a random source video from `input/`.
-* Roll another random source video before generation.
-* Generate natural AI narration using Edge TTS.
-* Automatically transcribe the generated narration with Faster-Whisper.
-* Generate synchronized captions from Whisper timestamps.
-* Burn captions directly into the final video.
-* Replace the source video's audio with the generated narration.
-* Automatically mute source-video audio.
-* Automatically synchronize video duration with narration duration.
-* Loop shorter source videos when necessary.
-* Trim longer source videos when necessary.
-* Export vertical 9:16 videos at 1080×1920.
+Faceless Art Studio can generate a complete short-form video from a written script.
 
----
+### Script
 
-# AI Voice Generation
+* Enter a script directly in the editor
+* Upload `.txt` scripts
+* Configure project names
+* Preserve the current editor draft while authentication is completed
 
-Faceless Art Studio uses **Edge TTS** for AI voice generation.
+### Source Video
 
-The application can dynamically retrieve available voices and allows the user to select a voice from the Video Editor.
+* Select videos from the local `input/` directory
+* Randomly select a source video
+* Roll another source video before generation
+* Automatically loop shorter source videos
+* Automatically trim longer source videos
 
-Default voice:
+### AI Narration
 
-```text
-en-US-AriaNeural
-```
+The application uses **Edge TTS** to generate AI narration.
 
-Example CLI usage:
+The selected voice is converted into a WAV voiceover before entering the transcription and rendering stages.
 
-```bash
-python main.py --text "Hello world." --video input/video.mp4
-```
+### Captions
 
-Specify a voice:
-
-```bash
-python main.py --text "Hello world." --video input/video.mp4 --voice en-US-GuyNeural
-```
-
-List available voices:
-
-```bash
-python main.py --list-voices
-```
-
-### Audio pipeline
-
-Generated Edge TTS audio is converted into a standard PCM WAV format:
-
-```text
-PCM 16-bit
-44.1 kHz
-Stereo
-```
-
-The final MP4 contains the generated narration as its primary audio stream.
-
-The original source-video audio is intentionally excluded from the final render.
-
----
-
-# Intelligent Captions
-
-Captions are generated from the actual generated voice-over rather than simply displaying the original script.
-
-The workflow is:
+Captions are generated from the **actual generated narration**, rather than simply displaying the original script.
 
 ```text
 AI Voice
@@ -181,127 +154,72 @@ Faster-Whisper
    ↓
 Word-level timestamps
    ↓
-Caption phrase grouping
+Phrase grouping
    ↓
-ASS subtitle generation
+ASS subtitles
    ↓
 FFmpeg burn-in
 ```
 
-This allows captions to follow the actual spoken timing.
+This allows caption timing to follow the generated speech.
 
-### Caption capabilities
+Current caption functionality includes:
 
 * Word-level timing
-* Short phrase grouping
-* Multiple caption presets
+* Phrase grouping
+* Multiple presets
 * Caption positioning
-* Configurable caption size
-* Live caption preview
+* Caption size adjustment
+* Live preview
 * Burned-in captions
-* Millisecond-level timing based on Whisper timestamps
-
-Current caption presets include:
-
-```text
-Bold Yellow
-Neon Cyan
-Studio Blue
-Classic White
-Minimal Gray
-Karaoke Blue
-```
-
-Available positions:
-
-```text
-Top
-Center
-Bottom
-```
-
-Caption size can be adjusted from:
-
-```text
-50% → 200%
-```
 
 ---
 
-# Video Processing
+# Video Templates
 
-FFmpeg is responsible for the final media-processing stage.
+The Templates section provides reusable starting points for video creation.
 
-Source videos are converted into:
+Features include:
 
-```text
-1080 × 1920
-9:16
-```
+* Template browsing
+* Search
+* Filtering
+* Sorting
+* Favorites
+* Template preview
+* Use Template workflow
 
-The source video is scaled to fill the vertical canvas and center-cropped when necessary.
-
-The generated narration determines the final duration.
-
-### Duration behavior
-
-If:
-
-```text
-Source video < narration
-```
-
-the source video is looped until the narration finishes.
-
-If:
-
-```text
-Source video > narration
-```
-
-the source video is trimmed to the narration duration.
-
-The final result therefore remains synchronized with the generated voice.
+Templates are designed to provide a faster starting point without replacing the underlying generation pipeline.
 
 ---
 
-# Web Video Editor
+# Media Library
 
-The v1.3.0 release introduces a complete working browser-based Video Editor.
+The Media Library provides a centralized interface for locally available project media.
 
-Start the application locally and open the web interface to access the editor.
+It supports:
 
-### Editor workflow
+* Browsing local media
+* Search
+* Filtering
+* Sorting
+* Grid/list views
+* Media preview
+* Download
+* Import/upload
+* Using media in the editor
+* Filename/path copying
+* Storage usage information
 
-```text
-1. Enter or upload script
-        ↓
-2. Name the project
-        ↓
-3. Select AI voice
-        ↓
-4. Configure captions
-        ↓
-5. Select / randomize source video
-        ↓
-6. Generate video
-        ↓
-7. Monitor rendering progress
-        ↓
-8. Preview finished video
-        ↓
-9. Save project
-        ↓
-10. Download MP4
-```
+The current Media Library is **local-first** and does not represent cloud media storage.
 
 ---
 
-# Project Management
+# My Projects
 
-Generated videos are tracked inside **My Projects**.
+Generated projects can be managed through the My Projects interface.
 
-Each generated project can contain metadata including:
+Project information can include:
 
 * Project name
 * Source video
@@ -310,29 +228,203 @@ Each generated project can contain metadata including:
 * Resolution
 * Aspect ratio
 * Generated video
-* Voice-over
-* Subtitle file
+* Voiceover
+* Subtitle information
 
-Projects can be opened from the application and completed videos can be downloaded.
+Completed videos can be previewed and downloaded from the application.
 
-The internal job ID is used for backend storage and tracking, while the user's project name is used for the downloaded filename.
+The current project system remains local-first.
 
-For example:
+---
+
+# Authentication
+
+Faceless Art Studio uses **Supabase Auth** as the authentication foundation.
+
+The application supports the authentication architecture for:
+
+* Email/password authentication
+* Email OTP
+* Phone OTP
+* Password reset
+* Google OAuth
+* GitHub OAuth
+* Email verification
+* Persistent sessions
+* User profile information
+
+Authentication-sensitive video generation is protected by the backend rather than relying only on frontend UI checks.
+
+### Important
+
+The authentication system requires a configured Supabase project and environment variables.
+
+Provider availability also depends on the corresponding provider being configured in Supabase.
+
+The current release should be considered the authentication foundation leading into the completed `v2.0.0` release.
+
+---
+
+# Settings
+
+The application includes a dedicated Settings area for user and application preferences.
+
+Current settings architecture includes:
+
+* Account information
+* Profile information
+* Appearance
+* Preferences
+* Notification preferences
+* Application information
+* Current application version
+* Repository information
+
+Settings are designed to remain lightweight and avoid exposing low-level rendering controls that belong to the media-processing pipeline.
+
+---
+
+# Help
+
+Faceless Art Studio includes an integrated Help section containing:
+
+### About
+
+An overview of the application and its major areas.
+
+### Video Creation
+
+A visual explanation of the complete generation workflow:
 
 ```text
-Project name:
-My First AI Reel
-
-Downloaded file:
-My First AI Reel.mp4
+Write / Enter Script
+        ↓
+Choose Source Video
+        ↓
+Choose Voice
+        ↓
+Configure Captions
+        ↓
+Generate Video
+        ↓
+Processing
+        ↓
+Preview
+        ↓
+Download / Save Project
 ```
+
+### Report a Bug
+
+Users can report problems with information such as:
+
+* What happened
+* Expected behavior
+* Page or feature used
+* Steps to reproduce
+* Screenshot, if available
+
+---
+
+# Media Processing Pipeline
+
+The core rendering architecture is shared between the application interfaces.
+
+```text
+                    Web Interface
+                         │
+                         ▼
+                      server.py
+                         │
+                         ▼
+                     Pipeline
+                         │
+             ┌───────────┼───────────┐
+             ▼           ▼           ▼
+           TTS        Whisper      Captions
+             │           │           │
+             └───────────┼───────────┘
+                         ▼
+                       FFmpeg
+                         │
+                         ▼
+                     Final MP4
+```
+
+The architecture keeps the media-processing layer separate from the frontend interface.
+
+---
+
+# Audio Design
+
+The generated video's primary audio is the AI-generated narration.
+
+```text
+Source Video
+     │
+     └── Video Frames
+             │
+             ▼
+      ┌──────────────┐
+      │ Final Render │
+      └──────────────┘
+             ▲
+             │
+      AI Voiceover
+```
+
+The original source-video audio is intentionally excluded from the generated result.
+
+This prevents existing dialogue or background audio from competing with the generated narration.
+
+---
+
+# Output Format
+
+Generated videos are designed for short-form vertical platforms.
+
+| Property     | Output                    |
+| ------------ | ------------------------- |
+| Resolution   | 1080 × 1920               |
+| Aspect Ratio | 9:16                      |
+| Container    | MP4                       |
+| Audio        | Generated narration       |
+| Captions     | Burned into video         |
+| Duration     | Synchronized to narration |
+
+---
+
+# Technology Stack
+
+## Backend
+
+| Technology     | Purpose                           |
+| -------------- | --------------------------------- |
+| Python         | Application and media pipeline    |
+| aiohttp        | Backend API                       |
+| Edge TTS       | AI text-to-speech                 |
+| Faster-Whisper | Speech recognition and timestamps |
+| pysubs2        | Subtitle / ASS generation         |
+| FFmpeg         | Video and audio processing        |
+| pathlib        | File management                   |
+| subprocess     | Media-process execution           |
+
+## Frontend
+
+| Technology  | Purpose                    |
+| ----------- | -------------------------- |
+| React       | User interface             |
+| TypeScript  | Type-safe frontend         |
+| Vite        | Frontend build system      |
+| CSS         | UI and responsive styling  |
+| Supabase JS | Authentication integration |
 
 ---
 
 # Project Structure
 
 ```text
-Faceless-Art-Studio-v1/
+Faceless-Art-Studio/
 │
 ├── main.py
 ├── server.py
@@ -342,10 +434,6 @@ Faceless-Art-Studio-v1/
 ├── LICENSE
 │
 ├── input/
-│   ├── .gitkeep
-│   ├── Input1.mp4
-│   ├── Input2.mp4
-│   └── ...
 │
 ├── output/
 │   ├── voiceovers/
@@ -355,11 +443,9 @@ Faceless-Art-Studio-v1/
 ├── assets/
 │
 ├── docs/
-│   └── ROADMAP.md
 │
 ├── src/
 │   ├── __init__.py
-│   │
 │   ├── pipeline.py
 │   │
 │   ├── core/
@@ -380,138 +466,30 @@ Faceless-Art-Studio-v1/
     └── src/
         ├── App.tsx
         ├── EditorPage.tsx
-        ├── editorApi.ts
-        ├── projectStore.ts
-        └── styles.css
+        ├── TemplatesPage.tsx
+        ├── MediaLibraryPage.tsx
+        ├── LoginPage.tsx
+        ├── SignUpPage.tsx
+        ├── SettingsPage.tsx
+        ├── HelpPage.tsx
+        └── ...
 ```
-
----
-
-# Architecture
-
-Faceless Art Studio is designed around a shared media-processing core.
-
-```text
-                 Web UI
-                   │
-                   ▼
-              server.py
-                   │
-                   ▼
-             pipeline.py
-                   │
-        ┌──────────┼──────────┐
-        ▼          ▼          ▼
-      TTS       Whisper     Captions
-        │          │          │
-        └──────────┼──────────┘
-                   ▼
-                FFmpeg
-                   │
-                   ▼
-              Final MP4
-```
-
-The terminal application and web application use the same core processing pipeline.
-
-This avoids maintaining separate implementations for CLI and web-based generation.
-
----
-
-# Backend API
-
-The local backend runs on:
-
-```text
-http://127.0.0.1:8000
-```
-
-The frontend communicates with the backend through the API.
-
-## Available endpoints
-
-### Get available voices
-
-```http
-GET /api/voices
-```
-
-### List source videos
-
-```http
-GET /api/input-files
-```
-
-### Select a random source video
-
-```http
-GET /api/random-input
-```
-
-### Start video generation
-
-```http
-POST /api/generate
-```
-
-### Check generation status
-
-```http
-GET /api/jobs/{job_id}
-```
-
-### Download generated video
-
-```http
-GET /api/download/{filename}
-```
-
-The download endpoint supports the project title as the user-facing filename while retaining the internal job ID for backend storage.
-
----
-
-# Technology Stack
-
-## Backend
-
-| Technology     | Purpose                                 |
-| -------------- | --------------------------------------- |
-| Python         | Core application and pipeline           |
-| aiohttp        | Lightweight asynchronous API server     |
-| edge-tts       | AI text-to-speech                       |
-| faster-whisper | Local speech recognition and timestamps |
-| pysubs2        | Subtitle / ASS generation               |
-| FFmpeg         | Video and audio processing              |
-| pathlib        | File management                         |
-| subprocess     | External media-process execution        |
-| argparse       | CLI interface                           |
-
-## Frontend
-
-| Technology | Purpose                             |
-| ---------- | ----------------------------------- |
-| React      | User interface                      |
-| TypeScript | Type-safe frontend development      |
-| Vite       | Development server and build system |
-| CSS        | UI styling and responsive layout    |
 
 ---
 
 # Requirements
 
-## Python
+### Python
 
 Recommended:
 
 ```text
-Python 3.11 or 3.12
+Python 3.11+
 ```
 
-Python 3.10+ should generally work.
+### Node.js
 
-## Node.js
-
-The frontend requires a modern Node.js installation with npm.
+A modern Node.js installation with npm is required.
 
 Verify:
 
@@ -520,15 +498,15 @@ node --version
 npm --version
 ```
 
-## FFmpeg
+### FFmpeg
+
+FFmpeg must be installed and available through the system PATH.
 
 Verify:
 
 ```bash
 ffmpeg -version
 ```
-
-FFmpeg must be available through the system PATH.
 
 ---
 
@@ -537,17 +515,17 @@ FFmpeg must be available through the system PATH.
 Clone the repository:
 
 ```bash
-git clone <your-repository-url>
-cd Faceless-Art-Studio-v1
+git clone https://github.com/AbijitKumar/Faceless-Art-Studio.git
+cd Faceless-Art-Studio
 ```
 
-Create a Python virtual environment.
+Create and activate a Python virtual environment.
 
 ### Windows
 
-```bash
+```powershell
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 ```
 
 ### macOS / Linux
@@ -557,7 +535,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install Python dependencies:
+Install backend dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -573,19 +551,45 @@ cd ..
 
 ---
 
-# Running the Web Application
+# Supabase Configuration
 
-The web application uses two local processes.
+Authentication requires a Supabase project.
+
+Create environment files using the project's environment variable examples.
+
+Frontend variables include:
+
+```env
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Backend variables include:
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+```
+
+Do **not** commit environment files or Supabase secrets to Git.
+
+Provider-specific authentication such as Google, GitHub, email delivery, and phone SMS also requires the corresponding configuration inside Supabase.
+
+---
+
+# Running the Application
+
+The application uses a local backend and frontend development server.
 
 ## Terminal 1 — Backend
 
 From the project root:
 
-```bash
-.\venv\Scripts\python server.py
+```powershell
+.\.venv\Scripts\python server.py
 ```
 
-The backend should start at:
+The backend normally runs at:
 
 ```text
 http://127.0.0.1:8000
@@ -593,245 +597,90 @@ http://127.0.0.1:8000
 
 ## Terminal 2 — Frontend
 
-Open another terminal:
-
-```bash
+```powershell
 cd frontend
 npm run dev
 ```
 
-Vite will display the local development URL, normally:
+Vite normally provides:
 
 ```text
 http://localhost:5173/
 ```
 
-If that port is already occupied, Vite may automatically select another available port.
-
-Open the displayed URL in your browser.
+Open the URL displayed by Vite.
 
 ---
 
-# Running the Original CLI Pipeline
+# Backend API
 
-The original terminal workflow remains available.
+The local backend exposes API routes used by the frontend.
 
-Place a source video inside:
-
-```text
-input/
-```
-
-Then run:
-
-```bash
-python main.py --text "Your paragraph goes here." --video input/myvideo.mp4
-```
-
-Or:
-
-```bash
-python main.py --text-file input/script.txt --video input/myvideo.mp4
-```
-
-The output is stored in:
+Important routes include:
 
 ```text
-output/
-├── voiceovers/
-│   └── <job_id>.wav
-├── subtitles/
-│   └── <job_id>.srt
-└── videos/
-    └── <job_id>.mp4
+GET  /api/voices
+GET  /api/input-files
+GET  /api/random-input
+
+POST /api/generate
+GET  /api/jobs/{job_id}
+GET  /api/download/{filename}
+
+GET  /api/media
+POST /api/upload
 ```
 
----
-
-# Example CLI Workflow
-
-```bash
-python main.py \
-  --text-file input/script.txt \
-  --video input/Input1.mp4 \
-  --voice en-US-AriaNeural \
-  --model small
-```
-
-The pipeline performs:
-
-```text
-Script
-  ↓
-Edge TTS
-  ↓
-Voice-over WAV
-  ↓
-Faster-Whisper
-  ↓
-SRT / caption timing
-  ↓
-FFmpeg
-  ↓
-Vertical MP4
-```
-
----
-
-# Audio Design
-
-The final generated video intentionally does not retain the source video's original audio.
-
-Instead:
-
-```text
-Source video
-     │
-     └── Video frames only
-                │
-                ▼
-Generated AI voice ───────► Final MP4 audio
-```
-
-This prevents the background video's original dialogue or music from competing with the generated narration.
-
-The editor's source-video preview is muted by default.
-
-Once generation is complete, the generated MP4 can be previewed with its AI narration.
+Authentication-sensitive operations are handled by the backend authentication layer.
 
 ---
 
 # Verification
 
-The v1.3.0 implementation has been tested through both the terminal pipeline and the web API.
+Before releasing changes, verify the application with:
 
-Verified areas include:
+### Frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+### Backend
+
+```bash
+python -m py_compile server.py
+```
+
+For media-processing changes, perform a real generation test with a valid source video.
+
+Recommended verification areas:
 
 * Frontend production build
-* TypeScript compilation
-* API generation
-* Random input-video selection
-* Edge TTS voice generation
-* PCM WAV generation
+* Authentication flow
+* Email verification
+* Login/logout
+* Password reset
+* Video generation authorization
+* Script processing
+* Edge TTS generation
 * Faster-Whisper transcription
-* Word-level timestamps
-* Caption generation
-* Caption burn-in
-* Caption size scaling
-* Audio stream replacement
-* Source audio exclusion
-* Narration-duration synchronization
+* Caption timing
+* Caption rendering
+* Audio replacement
+* Duration synchronization
 * 1080×1920 output
-* 9:16 aspect ratio
-* Project naming
-* Download filename handling
-* Video download endpoint
-* My Projects integration
-
-Example verified output characteristics:
-
-```text
-Resolution:       1080 × 1920
-Aspect ratio:     9:16
-Audio:            AAC
-Sample rate:      44.1 kHz
-Channels:         Stereo
-Video format:     MP4
-```
+* Video preview
+* Project creation
+* Download
+* Templates
+* Media Library
 
 ---
 
-# 🛠️ Troubleshooting
+# Git & Output Hygiene
 
-## FFmpeg is not recognized
-
-If:
-
-```bash
-ffmpeg -version
-```
-
-fails, install FFmpeg and make sure its `bin` directory is included in PATH.
-
----
-
-## TTS generation fails
-
-Edge TTS requires an internet connection.
-
-Check your connection and try again.
-
----
-
-## Whisper transcription is slow
-
-Smaller models are faster.
-
-Try:
-
-```bash
---model tiny
-```
-
-or:
-
-```bash
---model base
-```
-
-Larger models generally provide better transcription quality at the cost of processing time.
-
----
-
-## Port 8000 is already in use
-
-This normally means another backend instance is already running.
-
-Do not start a second backend process on the same port.
-
-Check which process is using port 8000 on Windows:
-
-```powershell
-Get-NetTCPConnection -LocalPort 8000
-```
-
----
-
-## Port 5173 is already in use
-
-Vite automatically attempts another available port.
-
-For example:
-
-```text
-5173 → 5174
-```
-
-Use the URL printed by Vite.
-
----
-
-## Source video has no audio in the final output
-
-This is intentional.
-
-The final video uses the generated AI narration instead of the source video's original audio.
-
----
-
-## Captions appear incorrectly
-
-Caption timing is generated from the generated voice using Faster-Whisper.
-
-If timing problems occur, verify that the generated voice-over itself is valid and that the selected Whisper model completed successfully.
-
----
-
-# Output & Git Hygiene
-
-Generated media can become large very quickly.
-
-The repository should not normally contain generated:
+Generated media should normally remain outside Git.
 
 ```text
 output/videos/*.mp4
@@ -839,103 +688,62 @@ output/voiceovers/*.wav
 output/subtitles/*.srt
 ```
 
-unless a specific test asset is intentionally being tracked.
+Local source videos inside `input/` should also normally remain untracked unless they are intentionally included as project assets.
 
-Use `.gitignore` to keep generated files out of Git.
-
-Source videos placed in `input/` should also generally remain local unless they are intentionally included in the repository.
-
----
-
-# Version History
-
-## v1.3.0 — Video Generator + Web Editor
-
-Major milestone.
-
-### Added
-
-* Working web-based Video Editor
-* Script text input
-* `.txt` drag-and-drop upload
-* Random source-video selection
-* Project naming
-* Edge TTS voice selection
-* Faster-Whisper transcription
-* Synchronized captions
-* Caption presets
-* Caption position controls
-* Caption size slider
-* Real-time generation progress
-* Generated-video preview
-* My Projects integration
-* Video downloads
-* User-friendly download filenames
-* Collapsible icon sidebar
-* Improved project menus
-* Shared CLI/API processing pipeline
-* Source-audio removal
-* Narration-duration-based video trimming/looping
-
-### Verification
+Never commit:
 
 ```text
-Frontend build:       PASS
-API generation:       PASS
-CLI generation:       PASS
-Voice generation:     PASS
-Caption generation:   PASS
-Caption burn-in:      PASS
-Audio replacement:    PASS
-Duration sync:        PASS
-Download endpoint:    PASS
+.env
+.env.local
+frontend/.env
+frontend/.env.local
 ```
+
+or any other file containing private credentials.
 
 ---
 
 # Roadmap
 
-The project is intentionally being developed incrementally.
+## v1.x — Foundation
 
-## Completed
+Completed milestones include:
 
-### v1.0.0
-
-* Terminal-first video-generation pipeline
+* Terminal media pipeline
 * Edge TTS
 * Faster-Whisper
-* SRT generation
 * FFmpeg rendering
-* Vertical 9:16 output
-
-### v1.3.0
-
 * Web Video Editor
-* Script upload
-* Random source-video selection
+* Script input
 * AI voice selection
-* Animated captions
 * Caption customization
 * Project management
 * Video preview
-* Download system
-* API backend
-* Responsive editor layout
+* Video downloads
+* Templates
+* Media Library
+* Settings
+* Help
+* Supabase authentication foundation
 
 ---
 
-## Planned
+# v2.0.0 — Completed Application
 
-### Rendering & Editing
+`v2.0.0` is planned as the major completed-application milestone.
 
-* Advanced caption animations
+Potential areas for the v2 release include:
+
+### Video Creation
+
+* Advanced caption animation
 * Per-word highlighting
-* Caption animation presets
+* More caption animation presets
 * Background music
 * Sound effects
 * Volume controls
 * Video speed controls
-* More video transitions
+* Transitions
 * Scene segmentation
 * B-roll support
 * Multiple source clips
@@ -955,7 +763,7 @@ The project is intentionally being developed incrementally.
 
 ### Platform Features
 
-* User authentication
+* More complete authentication
 * Cloud project storage
 * Rendering queue
 * Batch generation
@@ -966,7 +774,7 @@ The project is intentionally being developed incrementally.
 * Social-media export presets
 * Analytics
 
-Potential export presets:
+Potential export targets:
 
 ```text
 YouTube Shorts
@@ -974,73 +782,43 @@ Instagram Reels
 TikTok
 ```
 
+The exact v2 scope will be determined as development progresses.
+
 ---
 
 # Development Philosophy
 
-Faceless Art Studio is being developed as a modular system rather than a single monolithic application.
+Faceless Art Studio is being developed as a modular application rather than a monolithic media editor.
 
 The core principle is:
 
 ```text
-Stable media pipeline
+Stable Media Pipeline
         +
-Replaceable interface
+Replaceable Interface
         +
-Incremental AI features
+Incremental AI Features
 ```
 
-The current architecture allows the frontend to evolve without rewriting the underlying video-generation engine.
-
-Future architecture can therefore grow toward:
-
-```text
-                    ┌───────────────┐
-                    │ Web / Desktop │
-                    │    Clients    │
-                    └───────┬───────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │   API Layer   │
-                    └───────┬───────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │ Job / Queue   │
-                    │   Manager     │
-                    └───────┬───────┘
-                            │
-                            ▼
-                  ┌───────────────────┐
-                  │ Rendering Engine  │
-                  └─────────┬─────────┘
-                            │
-             ┌──────────────┼──────────────┐
-             ▼              ▼              ▼
-          TTS Engine     Whisper       FFmpeg
-             │              │              │
-             └──────────────┼──────────────┘
-                            ▼
-                     Final Video
-```
+The frontend can evolve independently while the underlying media-processing engine remains reusable.
 
 ---
 
 # Contributing
 
-Development is currently focused on building the core product incrementally.
+Development is currently focused on completing the core application.
 
 Before submitting changes:
 
 1. Keep the media pipeline modular.
-2. Avoid duplicating processing logic between CLI and API.
-3. Test video generation with a real input video.
+2. Avoid duplicating processing logic.
+3. Test real video generation when media-processing code changes.
 4. Verify generated audio.
 5. Verify caption synchronization.
 6. Verify final video duration.
 7. Run the frontend production build.
-8. Keep generated media out of Git unless intentionally required.
+8. Keep generated media and secrets out of Git.
+9. Avoid unrelated changes to existing working features.
 
 Frontend verification:
 
@@ -1049,23 +827,19 @@ cd frontend
 npm run build
 ```
 
-Backend verification should include a real generation test whenever media-processing code is modified.
-
 ---
 
 # License
 
-See the `LICENSE` file included in this repository.
+See the [`LICENSE`](LICENSE) file included in the repository.
 
 ---
 
-#  Project Status
+# Project Status
 
-**Current status: Active development**
+**Status: Active Development — v1.7.0**
 
-Faceless Art Studio has progressed from a terminal-based prototype into a functional local video-generation platform.
-
-The current priority is improving the rendering engine and editor experience while maintaining a reliable, testable media pipeline underneath.
+Faceless Art Studio has evolved from a terminal-based video-generation experiment into a local-first AI video creation platform with a browser-based editor and supporting application infrastructure.
 
 ```text
 v1.0.0
@@ -1073,13 +847,27 @@ Terminal Pipeline
       │
       ▼
 v1.3.0
-Web Video Generator
+Web Video Editor
       │
       ▼
-Future
-AI-powered Video Creation Platform
+v1.5.0
+Templates
+      │
+      ▼
+v1.6.0
+Media Library
+      │
+      ▼
+v1.7.0
+Pre-v2 Product Milestone
+      │
+      ▼
+v2.0.0
+Completed Application
 ```
 
 ---
 
-> **Faceless Art Studio — Script it. Voice it. Caption it. Render it.**
+> **Faceless Art Studio**
+>
+> **Script it. Voice it. Caption it. Render it.**

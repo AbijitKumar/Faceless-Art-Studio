@@ -39,12 +39,16 @@ import {
   Voice,
 } from "./editorApi";
 import { projectStore } from "./projectStore";
+import { settingsStore } from "./settingsStore";
 import { TemplateConfig } from "./templates";
+import { useAuth } from "./auth/useAuth";
+import { AuthModal } from "./auth/AuthModal";
 
 export interface EditorPageProps {
   onBack: () => void;
   onNavigateProjects: () => void;
   initialTemplate?: TemplateConfig | null;
+  initialVideo?: InputFile | null;
 }
 
 const PRESET_OPTIONS = [
@@ -67,24 +71,49 @@ const FONT_OPTIONS = [
 const DEFAULT_SCRIPT =
   "AI is dramatically simple. Turn your ideas into high-impact faceless videos in seconds.";
 
-export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: EditorPageProps) {
+export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initialVideo }: EditorPageProps) {
   // ── Project Metadata ────────────────────────────────────────────────────────
-  const [projectTitle, setProjectTitle] = useState(
-    initialTemplate ? `${initialTemplate.name} Reel` : "My Faceless Video"
-  );
+  const [projectTitle, setProjectTitle] = useState(() => {
+    if (initialTemplate) return `${initialTemplate.name} Reel`;
+    try {
+      const settings = settingsStore.getSettings();
+      if (settings.autoSaveProjects) {
+        const raw = localStorage.getItem("faceless_editor_draft");
+        if (raw) {
+          const d = JSON.parse(raw);
+          if (d?.projectTitle) return d.projectTitle;
+        }
+      }
+    } catch {}
+    return "My Faceless Video";
+  });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const { isAuthenticated, session } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // ── Script State (Primary First Screen) ─────────────────────────────────────
-  const [scriptText, setScriptText] = useState(
-    initialTemplate?.sampleScript || DEFAULT_SCRIPT
-  );
+  const [scriptText, setScriptText] = useState(() => {
+    if (initialTemplate?.sampleScript) return initialTemplate.sampleScript;
+    try {
+      const settings = settingsStore.getSettings();
+      if (settings.autoSaveProjects) {
+        const raw = localStorage.getItem("faceless_editor_draft");
+        if (raw) {
+          const d = JSON.parse(raw);
+          if (typeof d?.scriptText === "string") return d.scriptText;
+        }
+      }
+    } catch {}
+    return DEFAULT_SCRIPT;
+  });
   const [isDraggingTxt, setIsDraggingTxt] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+
   // ── Random Source Video State ───────────────────────────────────────────────
   const [availableVideos, setAvailableVideos] = useState<InputFile[]>([]);
-  const [selectedVideo, setSelectedVideo] = useState<InputFile | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<InputFile | null>(initialVideo || null);
   const [sourceVideoError, setSourceVideoError] = useState<string | null>(null);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
 
@@ -160,7 +189,38 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
     }
   }, [initialTemplate]);
 
+  // ── Update State when initialVideo Changes ─────────────────────────────────
+  useEffect(() => {
+    if (initialVideo) {
+      setSelectedVideo(initialVideo);
+      if (videoRef.current) {
+        videoRef.current.src = initialVideo.url;
+        videoRef.current.load();
+      }
+    }
+  }, [initialVideo]);
+
+  // ── Debounced Auto-save of Editor Draft ──────────────────────────────────────
+  useEffect(() => {
+    try {
+      const settings = settingsStore.getSettings();
+      if (!settings.autoSaveProjects) return;
+
+      const timer = setTimeout(() => {
+        try {
+          localStorage.setItem(
+            "faceless_editor_draft",
+            JSON.stringify({ projectTitle, scriptText, updatedAt: Date.now() })
+          );
+        } catch {}
+      }, 400);
+
+      return () => clearTimeout(timer);
+    } catch {}
+  }, [projectTitle, scriptText]);
+
   // ── Load Voices & Random Source Video on Mount ──────────────────────────────
+
   useEffect(() => {
     let isMounted = true;
 
@@ -178,19 +238,25 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
         if (isMounted) setVoiceError("Failed to load voices. Ensure backend server is running.");
       });
 
-    // 2. Fetch real videos from input/ and select one randomly
+    // 2. Fetch real videos from input/ and select one randomly (or use initialVideo)
     setIsLoadingSource(true);
     fetchInputFiles()
       .then((files) => {
         if (!isMounted) return;
         setAvailableVideos(files);
-        if (files.length === 0) {
+        if (files.length === 0 && !initialVideo) {
           setSourceVideoError("No source videos are available in the input folder.");
           setSelectedVideo(null);
-        } else {
+        } else if (!initialVideo) {
           // Pick a random video
           const randomVideo = files[Math.floor(Math.random() * files.length)];
           setSelectedVideo(randomVideo);
+          setSourceVideoError(null);
+        } else {
+          // Verify if initialVideo is in the list, or keep initialVideo
+          const matched = files.find((f) => f.name === initialVideo.name || f.path === initialVideo.path);
+          if (matched) setSelectedVideo(matched);
+          else setSelectedVideo(initialVideo);
           setSourceVideoError(null);
         }
       })
@@ -204,7 +270,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialVideo]);
 
   // ── Pick Another Random Source Video ────────────────────────────────────────
   const handleRollRandomVideo = () => {
@@ -380,6 +446,12 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
     setScriptError(null);
     setGenerationError(null);
 
+    // Guard with authentication
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      return;
+    }
+
     // Validation
     const cleanText = scriptText.trim();
     if (!cleanText) {
@@ -441,12 +513,12 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
         voice: selectedVoice,
         caption_settings: captionSettings,
         video_settings: videoSettings,
-      });
+      }, session?.access_token);
 
       // 3. Poll backend for progress
       const pollInterval = setInterval(async () => {
         try {
-          const status = await getJobStatus(jobId);
+          const status = await getJobStatus(jobId, session?.access_token);
           setGenerationStage(status.stage);
 
           if (status.status === "completed" && status.result) {
@@ -1241,6 +1313,19 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate }: Edit
           </div>
         </div>
       )}
+
+      {/* ── Auth Modal Gate (Preserves Draft State) ────────────────────────── */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          // Resume generation after auth completes
+          setTimeout(() => {
+            handleGenerate();
+          }, 150);
+        }}
+      />
     </div>
   );
 }

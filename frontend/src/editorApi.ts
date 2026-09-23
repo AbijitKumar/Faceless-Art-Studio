@@ -105,12 +105,18 @@ export async function fetchRandomInput(): Promise<InputFile> {
   return data.file;
 }
 
-export async function uploadVideo(file: File): Promise<InputFile> {
+export async function uploadVideo(file: File, token?: string): Promise<InputFile> {
   const formData = new FormData();
   formData.append("file", file);
 
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch("/api/upload", {
     method: "POST",
+    headers,
     body: formData,
   });
 
@@ -123,11 +129,17 @@ export async function uploadVideo(file: File): Promise<InputFile> {
 }
 
 export async function startGeneration(
-  req: GenerateRequest
+  req: GenerateRequest,
+  token?: string
 ): Promise<{ job_id: string; title: string; source_video: string; status: string }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch("/api/generate", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(req),
   });
 
@@ -139,10 +151,18 @@ export async function startGeneration(
   return res.json();
 }
 
-export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`/api/jobs/${jobId}`);
+export async function getJobStatus(jobId: string, token?: string): Promise<JobStatus> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`/api/jobs/${jobId}`, {
+    headers,
+  });
   if (!res.ok) {
-    throw new Error(`Failed to fetch job status: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch job status: ${res.statusText}`);
   }
   return res.json();
 }

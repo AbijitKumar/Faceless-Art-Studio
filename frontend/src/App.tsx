@@ -1,37 +1,62 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, Bell, ChevronDown, Clock3, FolderKanban, HardDrive,
+  Activity, Bell, ChevronDown, FolderKanban,
   HelpCircle, Image, LayoutDashboard, LayoutTemplate, Plus,
   Search, Settings, Sparkles, Upload, Video, CheckCircle2,
   MoreVertical, X, FileVideo, Clock, ChevronRight, ArrowUpDown,
   Download, Menu
 } from "lucide-react";
+import logoSrc from "./assets/logo.png";
 import { Project, ProjectStatus, projectStore, useProjects } from "./projectStore";
 import { EditorPage } from "./EditorPage";
 import { TemplatesPage } from "./TemplatesPage";
+import { MediaLibraryPage } from "./MediaLibraryPage";
+import { SettingsPage } from "./SettingsPage";
+import { HelpPage, HelpSectionId } from "./HelpPage";
+import { settingsStore, useSettings } from "./settingsStore";
 import { TemplateConfig } from "./templates";
+import { MediaAsset } from "./mediaApi";
+import { InputFile } from "./editorApi";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { LoginPage } from "./auth/LoginPage";
+import { SignUpPage } from "./auth/SignUpPage";
+import { ForgotPasswordPage } from "./auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "./auth/ResetPasswordPage";
+import { LogOut } from "lucide-react";
 
-type Page = "dashboard" | "projects" | "editor" | "templates" | "media" | "settings" | "help";
+
+type Page =
+  | "dashboard"
+  | "projects"
+  | "editor"
+  | "templates"
+  | "media"
+  | "settings"
+  | "help"
+  | "login"
+  | "signup"
+  | "forgot-password"
+  | "reset-password";
 
 const nav: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "projects",  label: "My Projects",   icon: FolderKanban },
-  { id: "editor",    label: "Create Video",   icon: Plus },
-  { id: "templates", label: "Templates",      icon: LayoutTemplate },
-  { id: "media",     label: "Media Library",  icon: Image },
+  { id: "projects", label: "My Projects", icon: FolderKanban },
+  { id: "editor", label: "Create Video", icon: Plus },
+  { id: "templates", label: "Templates", icon: LayoutTemplate },
+  { id: "media", label: "Media Library", icon: Image },
 ];
 
 const SEARCH_INDEX: { label: string; description: string; page: Page }[] = [
-  { label: "Dashboard",      description: "Your studio overview and stats",        page: "dashboard" },
-  { label: "My Projects",    description: "View all your created projects",         page: "projects"  },
-  { label: "Create Video",   description: "Start a new video from a script",        page: "editor"    },
-  { label: "Templates",      description: "Browse available video templates",       page: "templates" },
-  { label: "Media Library",  description: "Manage your uploaded media",             page: "media"     },
-  { label: "Settings",       description: "Configure your workspace preferences",   page: "settings"  },
-  { label: "Help",           description: "Help center and documentation",          page: "help"      },
-  { label: "Upload Media",   description: "Add source media to your library",       page: "media"     },
-  { label: "Quick Actions",  description: "Jump straight into your workflow",       page: "dashboard" },
-  { label: "Recent Projects",description: "Your latest creations",                 page: "projects"  },
+  { label: "Dashboard", description: "Your studio overview and stats", page: "dashboard" },
+  { label: "My Projects", description: "View all your created projects", page: "projects" },
+  { label: "Create Video", description: "Start a new video from a script", page: "editor" },
+  { label: "Templates", description: "Browse available video templates", page: "templates" },
+  { label: "Media Library", description: "Manage your uploaded media", page: "media" },
+  { label: "Settings", description: "Configure your workspace preferences", page: "settings" },
+  { label: "Help", description: "Help center and documentation", page: "help" },
+  { label: "Upload Media", description: "Add source media to your library", page: "media" },
+  { label: "Quick Actions", description: "Jump straight into your workflow", page: "dashboard" },
+  { label: "Recent Projects", description: "Your latest creations", page: "projects" },
 ];
 
 function greeting() {
@@ -166,20 +191,168 @@ function NotifDropdown() {
   );
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
-function App() {
-  const [page, setPage] = useState<Page>("dashboard");
+// ── UserMenuDropdown ────────────────────────────────────────────────────────
+function UserMenuDropdown({
+  user,
+  profile,
+  onNavigate,
+  onSignOut,
+  onClose,
+}: {
+  user: any;
+  profile: any;
+  onNavigate: (p: Page) => void;
+  onSignOut: () => void;
+  onClose: () => void;
+}) {
+  const name =
+    profile?.display_name ||
+    user?.user_metadata?.display_name ||
+    user?.email?.split("@")[0] ||
+    "Creator";
+  const email = user?.email || "";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 0,
+        top: "100%",
+        marginTop: 8,
+        width: 230,
+        backgroundColor: "#181B20",
+        border: "1px solid #2E3644",
+        borderRadius: 12,
+        boxShadow: "0 12px 32px rgba(0, 0, 0, 0.6)",
+        padding: "8px 0",
+        zIndex: 1000,
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
+      <div style={{ padding: "10px 16px 12px", borderBottom: "1px solid #282E38" }}>
+        <div style={{ fontWeight: 700, color: "#F8FAFC", fontSize: 13.5 }}>{name}</div>
+        <div
+          style={{
+            color: "#94A3B8",
+            fontSize: 12,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {email}
+        </div>
+      </div>
+      <div style={{ padding: "4px 0" }}>
+        <button
+          onClick={() => {
+            onNavigate("settings");
+            onClose();
+          }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 16px",
+            background: "none",
+            border: "none",
+            color: "#E2E8F0",
+            fontSize: 13,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <Settings size={15} color="#94A3B8" /> Settings
+        </button>
+        <button
+          onClick={() => {
+            onNavigate("help");
+            onClose();
+          }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 16px",
+            background: "none",
+            border: "none",
+            color: "#E2E8F0",
+            fontSize: 13,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <HelpCircle size={15} color="#94A3B8" /> Help & Support
+        </button>
+      </div>
+      <div style={{ borderTop: "1px solid #282E38", paddingTop: 4 }}>
+        <button
+          onClick={() => {
+            onSignOut();
+            onClose();
+          }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 16px",
+            background: "none",
+            border: "none",
+            color: "#FCA5A5",
+            fontSize: 13,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <LogOut size={15} color="#EF4444" /> Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── AppContent ───────────────────────────────────────────────────────────────
+function AppContent() {
+  const settings = useSettings();
+  const { user, profile, isAuthenticated, signOut, isPasswordRecovery } = useAuth();
+
+  const [page, setPage] = useState<Page>(() => {
+    const landing = settingsStore.getSettings().defaultLandingPage;
+    if (landing === "projects") return "projects";
+    if (landing === "editor") return "editor";
+    return "dashboard";
+  });
+  const [helpSection, setHelpSection] = useState<HelpSectionId>("about");
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateConfig | null>(null);
+  const [selectedSourceVideo, setSelectedSourceVideo] = useState<InputFile | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [now, setNow] = useState(Date.now());
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchOpen,  setSearchOpen]  = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const searchWrapRef = useRef<HTMLDivElement>(null);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const notifWrapRef = useRef<HTMLDivElement>(null);
+
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Watch for password recovery session
+  useEffect(() => {
+    if (isPasswordRecovery) {
+      setPage("reset-password");
+    }
+  }, [isPasswordRecovery]);
+
+  // Apply theme on mount and whenever theme changes
+  useEffect(() => {
+    settingsStore.applyTheme(settings.theme);
+  }, [settings.theme]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -189,21 +362,58 @@ function App() {
   const _time = useMemo(() => greeting(), [now]); void _time;
 
   const closeSearch = () => { setSearchOpen(false); setSearchQuery(""); };
-  const closeNotif  = () => setNotifOpen(false);
+  const closeNotif = () => setNotifOpen(false);
+  const closeUserMenu = () => setUserMenuOpen(false);
 
   useCloseOnOutsideAndEsc(searchWrapRef, searchOpen, closeSearch);
-  useCloseOnOutsideAndEsc(notifWrapRef,  notifOpen,  closeNotif);
+  useCloseOnOutsideAndEsc(notifWrapRef, notifOpen, closeNotif);
+  useCloseOnOutsideAndEsc(userMenuRef, userMenuOpen, closeUserMenu);
+
+  const userDisplayName = isAuthenticated
+    ? profile?.display_name || user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Creator"
+    : settings.displayName || "Guest Studio";
+
+  const userAvatarColor = isAuthenticated
+    ? profile?.avatar_color || settings.avatarColor
+    : settings.avatarColor;
+
+  const userInitials = (userDisplayName.trim() || "A").slice(0, 2).toUpperCase();
 
   const go = (next: Page) => {
-    if (next !== "editor") {
-      // Optional: keep or reset template when explicitly clicking away
-    }
     setPage(next);
     closeSearch();
   };
 
+  if (page === "login") {
+    return <LoginPage onNavigate={(p) => go(p as Page)} onSuccess={() => go("dashboard")} />;
+  }
+  if (page === "signup") {
+    return <SignUpPage onNavigate={(p) => go(p as Page)} onSuccess={() => go("dashboard")} />;
+  }
+  if (page === "forgot-password") {
+    return <ForgotPasswordPage onNavigate={(p) => go(p as Page)} />;
+  }
+  if (page === "reset-password") {
+    return <ResetPasswordPage onNavigate={(p) => go(p as Page)} />;
+  }
+
+
   const handleUseTemplate = (template: TemplateConfig) => {
     setSelectedTemplate(template);
+    setSelectedSourceVideo(null);
+    setPage("editor");
+    closeSearch();
+  };
+
+  const handleUseMediaInEditor = (asset: MediaAsset) => {
+    setSelectedSourceVideo({
+      name: asset.name,
+      path: asset.path,
+      relPath: asset.relPath,
+      url: asset.url,
+      size: asset.size,
+    });
+    setSelectedTemplate(null);
     setPage("editor");
     closeSearch();
   };
@@ -229,7 +439,11 @@ function App() {
             <Menu size={18} />
           </button>
           <div className="brand-mark" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
-            <Video size={19} />
+            <img
+              src={logoSrc}
+              alt="Faceless Art Studio"
+              style={{ width: 28, height: 28, objectFit: "contain", display: "block" }}
+            />
           </div>
           {sidebarExpanded && (
             <div className="brand-text">
@@ -271,11 +485,21 @@ function App() {
             {sidebarExpanded && <span>Help</span>}
           </button>
         </section>
-        <div className="profile" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
-          <div className="avatar">A</div>
+        <div
+          className="profile"
+          onClick={() => go(isAuthenticated ? "settings" : "login")}
+          title={isAuthenticated ? "Settings & Workspace Profile" : "Sign In to Faceless Studio"}
+          style={{ cursor: "pointer" }}
+        >
+          <div className="avatar" style={{ background: userAvatarColor }}>
+            {userInitials}
+          </div>
           {sidebarExpanded && (
             <>
-              <div><b>Your Studio</b><span>Personal workspace</span></div>
+              <div>
+                <b>{userDisplayName}</b>
+                <span>{isAuthenticated ? "Personal workspace" : "Guest mode"}</span>
+              </div>
               <ChevronDown size={16} />
             </>
           )}
@@ -287,7 +511,7 @@ function App() {
           {/* ── Search ── */}
           <div className="search-wrap" ref={searchWrapRef}>
             <label className="search">
-              <Search size={16}/>
+              <Search size={16} />
               <input
                 placeholder="Search projects..."
                 aria-label="Search projects"
@@ -307,23 +531,109 @@ function App() {
           <div className="notif-wrap" ref={notifWrapRef}>
             <button className="icon" aria-label="Notifications"
               onClick={() => setNotifOpen((v) => !v)}>
-              <Bell size={18}/>
-              {hasUnread && <i/>}
+              <Bell size={18} />
+              {hasUnread && <i />}
             </button>
             {notifOpen && <NotifDropdown />}
           </div>
+
+          {/* ── User Session / Sign In ── */}
+          {isAuthenticated ? (
+            <div style={{ position: "relative" }} ref={userMenuRef}>
+              <button
+                className="topbar-user-btn"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "#181B20",
+                  border: "1px solid #282E38",
+                  borderRadius: 24,
+                  padding: "4px 10px 4px 5px",
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: userAvatarColor,
+                    color: "#FFFFFF",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {userInitials}
+                </div>
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#F8FAFC",
+                    maxWidth: 110,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {userDisplayName}
+                </span>
+                <ChevronDown size={14} color="#94A3B8" />
+              </button>
+              {userMenuOpen && (
+                <UserMenuDropdown
+                  user={user}
+                  profile={profile}
+                  onNavigate={go}
+                  onSignOut={signOut}
+                  onClose={() => setUserMenuOpen(false)}
+                />
+              )}
+            </div>
+          ) : (
+            <button
+              className="primary"
+              onClick={() => go("login")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 16px",
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 8,
+                boxShadow: "0 4px 12px rgba(30, 140, 250, 0.3)",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              <Sparkles size={14} /> Sign In
+            </button>
+          )}
         </header>
 
         {page === "dashboard"
           ? <Dashboard onNavigate={go} />
           : page === "projects"
-          ? <ProjectsPage onNavigate={go} />
-          : page === "templates"
-          ? <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
-          : page === "editor"
-          ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} initialTemplate={selectedTemplate} />
-          : <ProgressPage page={page} onBack={() => go("dashboard")} />}
+            ? <ProjectsPage onNavigate={go} />
+            : page === "templates"
+              ? <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
+              : page === "media"
+                ? <MediaLibraryPage onUseInEditor={handleUseMediaInEditor} onNavigateEditor={() => go("editor")} onNavigateProjects={() => go("projects")} />
+                : page === "editor"
+                  ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} initialTemplate={selectedTemplate} initialVideo={selectedSourceVideo} />
+                  : page === "settings"
+                    ? <SettingsPage onNavigateHelp={(targetSec) => { if (targetSec) setHelpSection(targetSec); setPage("help"); }} onNavigateAuth={(p) => go(p as Page)} />
+                    : page === "help"
+                      ? <HelpPage initialSection={helpSection} />
+                      : <ProgressPage page={page} onBack={() => go("dashboard")} />}
       </div>
+
     </div>
   );
 }
@@ -331,33 +641,6 @@ function App() {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const projects = useProjects();
-
-  const completedProjects = useMemo(
-    () => projects.filter((p) => p.status === "completed"),
-    [projects]
-  );
-
-  const totalMinutes = useMemo(() => {
-    let seconds = 0;
-    completedProjects.forEach((p) => {
-      if (p.duration) {
-        const parts = p.duration.split(":").map((n) => parseInt(n, 10));
-        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          seconds += parts[0] * 60 + parts[1];
-        } else if (parts.length === 1 && !isNaN(parts[0])) {
-          seconds += parts[0];
-        }
-      }
-    });
-    return Math.round(seconds / 60);
-  }, [completedProjects]);
-
-  const stats = [
-    ["Projects Created", `${projects.length}`, FolderKanban],
-    ["Videos Exported",  `${completedProjects.length}`, CheckCircle2],
-    ["Minutes Rendered", `${totalMinutes}`, Clock3],
-    ["Storage Used",  "0 GB", HardDrive],
-  ] as const;
 
   const recentProjects = useMemo(() => {
     return [...projects]
@@ -374,17 +657,8 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
           <p>Turn your ideas into polished faceless videos.</p>
         </div>
         <button className="primary" onClick={() => onNavigate("editor")}>
-          <Plus size={17}/>Create New Video
+          <Plus size={17} />Create New Video
         </button>
-      </section>
-
-      <section className="stats">
-        {stats.map(([label, value, Icon]) => (
-          <article className="stat" key={label}>
-            <div className="stat-icon"><Icon size={19}/></div>
-            <div><span>{label}</span><strong>{value}</strong></div>
-          </article>
-        ))}
       </section>
 
       <section className="dashboard-grid">
@@ -397,7 +671,7 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
           />
           {projects.length === 0 ? (
             <Empty
-              icon={<FolderKanban/>}
+              icon={<FolderKanban />}
               title="No projects yet"
               text="Create your first video and it will appear here."
               action="Create your first video"
@@ -408,7 +682,7 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
               {recentProjects.map((p) => (
                 <div key={p.id} className="prj-mini-item" onClick={() => onNavigate("projects")}>
                   <div className="prj-mini-left">
-                    <div className="prj-mini-icon"><FileVideo size={16}/></div>
+                    <div className="prj-mini-icon"><FileVideo size={16} /></div>
                     <div>
                       <b>{p.title}</b>
                       <span>{new Date(p.createdAt).toLocaleDateString()} {p.duration ? `· ${p.duration}` : ""}</span>
@@ -422,27 +696,27 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
         </article>
         <div className="side">
           <article className="panel">
-            <PanelHead title="Quick Actions" sub="Jump straight into your workflow."/>
+            <PanelHead title="Quick Actions" sub="Jump straight into your workflow." />
             <div className="quick">
               <button onClick={() => onNavigate("editor")}>
-                <span className="qa blue"><Sparkles size={18}/></span>
+                <span className="qa blue"><Sparkles size={18} /></span>
                 <span><b>Create Video</b><small>Start from a script</small></span>
               </button>
               <button onClick={() => onNavigate("templates")}>
-                <span className="qa violet"><LayoutTemplate size={18}/></span>
+                <span className="qa violet"><LayoutTemplate size={18} /></span>
                 <span><b>Browse Templates</b><small>Pick a proven format</small></span>
               </button>
               <button onClick={() => onNavigate("media")}>
-                <span className="qa"><Upload size={18}/></span>
+                <span className="qa"><Upload size={18} /></span>
                 <span><b>Upload Media</b><small>Add source media</small></span>
               </button>
             </div>
           </article>
           <article className="panel activity">
-            <PanelHead title="Recent Activity" sub="Activity from your workspace."/>
+            <PanelHead title="Recent Activity" sub="Activity from your workspace." />
             {projects.length === 0 ? (
               <div className="activity-empty">
-                <Activity size={18}/>
+                <Activity size={18} />
                 <div><b>No recent activity</b><span>Your projects and exports will appear here.</span></div>
               </div>
             ) : (
@@ -484,7 +758,7 @@ function Empty({ icon, title, text, action, onClick }: {
     <div className="empty">
       <div className="empty-icon">{icon}</div>
       <h3>{title}</h3><p>{text}</p>
-      <button className="secondary" onClick={onClick}><Plus size={16}/>{action}</button>
+      <button className="secondary" onClick={onClick}><Plus size={16} />{action}</button>
     </div>
   );
 }
@@ -495,13 +769,13 @@ type FilterStatus = "all" | ProjectStatus;
 
 function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const projects = useProjects();
-  const [query,    setQuery]    = useState("");
-  const [filter,   setFilter]   = useState<FilterStatus>("all");
-  const [sort,     setSort]     = useState<SortKey>("updated");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<FilterStatus>("all");
+  const [sort, setSort] = useState<SortKey>("updated");
   const [selected, setSelected] = useState<Project | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameVal,setRenameVal]= useState("");
+  const [renameVal, setRenameVal] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close action menu on outside click
@@ -527,13 +801,13 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
       .filter((p) =>
         (filter === "all" || p.status === filter) &&
         (p.title.toLowerCase().includes(query.toLowerCase()) ||
-         (p.topic && p.topic.toLowerCase().includes(query.toLowerCase())))
+          (p.topic && p.topic.toLowerCase().includes(query.toLowerCase())))
       )
       .sort((a, b) => {
-        if (sort === "updated")  return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
-        if (sort === "title")    return a.title.localeCompare(b.title);
+        if (sort === "updated") return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+        if (sort === "title") return a.title.localeCompare(b.title);
         if (sort === "duration") return (a.duration || "").localeCompare(b.duration || "");
-        if (sort === "status")   return a.status.localeCompare(b.status);
+        if (sort === "status") return a.status.localeCompare(b.status);
         return 0;
       });
   }, [projects, filter, query, sort]);
@@ -560,17 +834,28 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   };
 
   const handleDelete = (id: string) => {
+    const currentSettings = settingsStore.getSettings();
+    if (currentSettings.confirmBeforeDelete) {
+      const p = projects.find((x) => x.id === id);
+      const title = p?.title ? `"${p.title}"` : "this project";
+      const confirmed = window.confirm(`Are you sure you want to delete ${title}? This action cannot be undone.`);
+      if (!confirmed) {
+        setMenuOpen(null);
+        return;
+      }
+    }
     projectStore.deleteProject(id);
     setMenuOpen(null);
     if (selected?.id === id) setSelected(null);
   };
 
+
   const FILTERS: { key: FilterStatus; label: string }[] = [
-    { key: "all",        label: "All" },
-    { key: "draft",      label: "Draft" },
+    { key: "all", label: "All" },
+    { key: "draft", label: "Draft" },
     { key: "processing", label: "Processing" },
-    { key: "completed",  label: "Completed" },
-    { key: "failed",     label: "Failed" },
+    { key: "completed", label: "Completed" },
+    { key: "failed", label: "Failed" },
   ];
 
   return (
@@ -583,7 +868,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
           <p>Manage and continue working on your videos.</p>
         </div>
         <button className="primary" onClick={() => onNavigate("editor")}>
-          <Plus size={17}/> Create New Video
+          <Plus size={17} /> Create New Video
         </button>
       </section>
 
@@ -591,7 +876,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
       {(projects.length > 0 || query || filter !== "all") && (
         <div className="prj-toolbar">
           <label className="prj-search">
-            <Search size={14}/>
+            <Search size={14} />
             <input
               placeholder="Search projects..."
               value={query}
@@ -600,7 +885,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
             />
             {query && (
               <button className="prj-search-clear" onClick={() => setQuery("")} aria-label="Clear">
-                <X size={12}/>
+                <X size={12} />
               </button>
             )}
           </label>
@@ -616,7 +901,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
           </div>
 
           <div className="prj-sort">
-            <ArrowUpDown size={13}/>
+            <ArrowUpDown size={13} />
             <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
               <option value="updated">Recently Updated</option>
               <option value="title">Name</option>
@@ -629,9 +914,9 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
 
       {/* ── Grid or empty state ── */}
       {visible.length === 0 ? (
-        <div className="empty" style={{minHeight:350}}>
+        <div className="empty" style={{ minHeight: 350 }}>
           <div className="empty-icon">
-            {projects.length === 0 ? <FolderKanban/> : <Search/>}
+            {projects.length === 0 ? <FolderKanban /> : <Search />}
           </div>
           <h3>{projects.length === 0 ? "No projects yet" : "No projects found"}</h3>
           <p>
@@ -641,7 +926,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
           </p>
           {projects.length === 0 && (
             <button className="secondary" onClick={() => onNavigate("editor")}>
-              <Plus size={16}/>Create New Video
+              <Plus size={16} />Create New Video
             </button>
           )}
         </div>
@@ -658,12 +943,12 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                 onKeyDown={(e) => e.key === "Enter" && setSelected(project)}
                 aria-label={`Open ${project.title}`}
               >
-                <div className="prj-thumb-icon"><FileVideo size={26}/></div>
+                <div className="prj-thumb-icon"><FileVideo size={26} /></div>
                 <span className={`prj-badge prj-badge--${project.status}`}>
                   {statusLabel(project.status)}
                 </span>
                 <div className="prj-thumb-play">
-                  <ChevronRight size={20}/>
+                  <ChevronRight size={20} />
                 </div>
               </div>
 
@@ -689,7 +974,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                   )}
                   <div className="prj-meta">
                     <span>{new Date(project.createdAt).toLocaleDateString()}</span>
-                    {project.duration && <span><Clock size={11}/> {project.duration}</span>}
+                    {project.duration && <span><Clock size={11} /> {project.duration}</span>}
                     {project.topic && <span>{project.topic}</span>}
                     {project.resolution && <span>{project.resolution}</span>}
                   </div>
@@ -702,7 +987,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                     aria-label="Project options"
                     onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => (v === project.id ? null : project.id)); }}
                   >
-                    <MoreVertical size={15}/>
+                    <MoreVertical size={15} />
                   </button>
                   {menuOpen === project.id && (
                     <div className="prj-menu">
@@ -729,7 +1014,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                 <h2>{selected.title}</h2>
               </div>
               <button className="prj-modal-close" onClick={() => setSelected(null)} aria-label="Close">
-                <X size={16}/>
+                <X size={16} />
               </button>
             </div>
             <div className="prj-modal-body">
@@ -738,7 +1023,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
               )}
               <div className="prj-modal-flex">
                 <div className="prj-modal-thumb">
-                  <FileVideo size={32}/>
+                  <FileVideo size={32} />
                   <span>{selected.resolution || "Video"}</span>
                 </div>
                 <div className="prj-modal-info">
@@ -748,8 +1033,8 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                   <div className="prj-info-row"><span>Duration</span><b>{selected.duration || "Not rendered"}</b></div>
                   {selected.sourceVideo && <div className="prj-info-row"><span>Source Video</span><b>{selected.sourceVideo}</b></div>}
                   {selected.topic && <div className="prj-info-row"><span>Topic</span><b>{selected.topic}</b></div>}
-                  {selected.error && <div className="prj-info-row"><span>Error</span><b style={{color:"#f06a6a",fontSize:11}}>{selected.error}</b></div>}
-                  {selected.videoPath && <div className="prj-info-row"><span>Video URL</span><b style={{wordBreak:"break-all",fontSize:10}}>{selected.videoPath}</b></div>}
+                  {selected.error && <div className="prj-info-row"><span>Error</span><b style={{ color: "#f06a6a", fontSize: 11 }}>{selected.error}</b></div>}
+                  {selected.videoPath && <div className="prj-info-row"><span>Video URL</span><b style={{ wordBreak: "break-all", fontSize: 10 }}>{selected.videoPath}</b></div>}
                 </div>
               </div>
             </div>
@@ -771,7 +1056,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                   );
                 })()}
                 <button className="secondary" onClick={() => { setSelected(null); onNavigate("editor"); }}>
-                  <Plus size={15}/> Create New Video
+                  <Plus size={15} /> Create New Video
                 </button>
               </div>
             </div>
@@ -785,16 +1070,16 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
 
 // ── Progress Page (editor, templates, media, settings, help) ──────────────────
 function ProgressPage({ page, onBack }: { page: Page; onBack: () => void }) {
-  const labels: Record<Page, [string, React.ReactNode]> = {
-    projects:  ["My Projects",   <FolderKanban/>],
-    editor:    ["Video Editor",  <Video/>],
-    templates: ["Templates",     <LayoutTemplate/>],
-    media:     ["Media Library", <Image/>],
-    settings:  ["Settings",      <Settings/>],
-    help:      ["Help Center",   <HelpCircle/>],
-    dashboard: ["Dashboard",     <LayoutDashboard/>],
+  const labels: Record<string, [string, React.ReactNode]> = {
+    projects: ["My Projects", <FolderKanban />],
+    editor: ["Video Editor", <Video />],
+    templates: ["Templates", <LayoutTemplate />],
+    media: ["Media Library", <Image />],
+    settings: ["Settings", <Settings />],
+    help: ["Help Center", <HelpCircle />],
+    dashboard: ["Dashboard", <LayoutDashboard />],
   };
-  const [title, icon] = labels[page];
+  const [title, icon] = labels[page] || ["Faceless Art Studio", <LayoutDashboard />];
   return (
     <main className="content">
       <div className="progress-page">
@@ -803,10 +1088,16 @@ function ProgressPage({ page, onBack }: { page: Page; onBack: () => void }) {
         <h1>{title}</h1>
         <p>Development in progress</p>
         <span>This workspace is being built and will be available in a future release.</span>
-        <button className="primary" onClick={onBack}><LayoutDashboard size={17}/>Back to Dashboard</button>
+        <button className="primary" onClick={onBack}><LayoutDashboard size={17} />Back to Dashboard</button>
       </div>
     </main>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
