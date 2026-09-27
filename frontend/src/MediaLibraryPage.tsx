@@ -48,6 +48,7 @@ import {
 } from "./mediaApi";
 import { useProjects } from "./projectStore";
 import { useAuth } from "./auth/AuthContext";
+import { useToast } from "./ToastContext";
 
 export interface MediaLibraryPageProps {
   onUseInEditor: (asset: MediaAsset) => void;
@@ -119,7 +120,7 @@ export function MediaLibraryPage({
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   // Toast / Copy Notification
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toast = useToast();
 
   const { session } = useAuth();
 
@@ -156,17 +157,9 @@ export function MediaLibraryPage({
     }
   };
 
-  // ── Toast Helper ───────────────────────────────────────────────────────────
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 2400);
-  };
-
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    showToast(`Copied ${label} to clipboard`);
+    toast.success(`Copied ${label} to clipboard`);
     setOpenMenuId(null);
   };
 
@@ -335,7 +328,7 @@ export function MediaLibraryPage({
     try {
       const res = await uploadMediaAsset(file, session?.access_token);
       setUploadSuccessName(res.name || file.name);
-      showToast(`Uploaded ${res.name || file.name} successfully!`);
+      toast.success(`Uploaded ${res.name || file.name} successfully!`);
       // Reload media library
       await loadMedia(true);
       setTimeout(() => {
@@ -363,13 +356,6 @@ export function MediaLibraryPage({
 
   return (
     <main className="content media-page-root">
-      {/* ── Toast Alert ───────────────────────────────────────────────────────── */}
-      {toastMessage && (
-        <div className="media-toast">
-          <Check size={14} className="text-blue" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* ── 1. Page Header ────────────────────────────────────────────────────── */}
       <section className="media-hero">

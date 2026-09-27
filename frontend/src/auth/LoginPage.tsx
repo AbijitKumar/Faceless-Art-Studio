@@ -1094,6 +1094,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate, onSuccess }) =
             GitHub
           </button>
         </div>
+
+        {/* ── Legal Links ── */}
+        <div style={{ marginTop: 22, textAlign: "center", fontSize: 12, color: "#64748B", lineHeight: 1.5 }}>
+          By signing in, you agree to our{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("terms")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94A3B8",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Terms of Service
+          </button>{" "}
+          and{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("privacy")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94A3B8",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Privacy Policy
+          </button>.
+        </div>
       </div>
     </div>
   );

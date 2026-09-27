@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
   Activity, Bell, ChevronDown, FolderKanban,
   HelpCircle, Image, LayoutDashboard, LayoutTemplate, Plus,
@@ -8,11 +8,6 @@ import {
 } from "lucide-react";
 import logoSrc from "./assets/logo.png";
 import { Project, ProjectStatus, projectStore, useProjects } from "./projectStore";
-import { EditorPage } from "./EditorPage";
-import { TemplatesPage } from "./TemplatesPage";
-import { MediaLibraryPage } from "./MediaLibraryPage";
-import { SettingsPage } from "./SettingsPage";
-import { HelpPage, HelpSectionId } from "./HelpPage";
 import { settingsStore, useSettings } from "./settingsStore";
 import { TemplateConfig } from "./templates";
 import { MediaAsset } from "./mediaApi";
@@ -22,23 +17,34 @@ import { LoginPage } from "./auth/LoginPage";
 import { SignUpPage } from "./auth/SignUpPage";
 import { ForgotPasswordPage } from "./auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./auth/ResetPasswordPage";
-import { LogOut } from "lucide-react";
+import { ToastProvider, useToast } from "./ToastContext";
+import { AppHeader, Page } from "./AppHeader";
+import { CookieConsentBanner } from "./CookieConsentBanner";
+import { HelpSectionId } from "./HelpPage";
 
+// Code-split heavy routes with React.lazy
+const EditorPage = lazy(() => import("./EditorPage").then((m) => ({ default: m.EditorPage })));
+const TemplatesPage = lazy(() => import("./TemplatesPage").then((m) => ({ default: m.TemplatesPage })));
+const MediaLibraryPage = lazy(() => import("./MediaLibraryPage").then((m) => ({ default: m.MediaLibraryPage })));
+const SettingsPage = lazy(() => import("./SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const HelpPage = lazy(() => import("./HelpPage").then((m) => ({ default: m.HelpPage })));
+const PrivacyPage = lazy(() => import("./PrivacyPage").then((m) => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import("./TermsPage").then((m) => ({ default: m.TermsPage })));
 
-import { AppHeader } from "./AppHeader";
+function PageSkeletonLoader() {
+  return (
+    <main className="content" style={{ display: "flex", flexDirection: "column", gap: 20, paddingTop: 32 }}>
+      <div style={{ height: 40, width: 280, background: "rgba(255,255,255,0.06)", borderRadius: 10, animation: "skeletonPulse 1.5s infinite" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ height: 160, background: "rgba(255,255,255,0.04)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", animation: "skeletonPulse 1.5s infinite" }} />
+        ))}
+      </div>
+    </main>
+  );
+}
 
-type Page =
-  | "dashboard"
-  | "projects"
-  | "editor"
-  | "templates"
-  | "media"
-  | "settings"
-  | "help"
-  | "login"
-  | "signup"
-  | "forgot-password"
-  | "reset-password";
+// Page type is imported from AppHeader (single source of truth)
 
 const nav: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -65,7 +71,8 @@ function statusLabel(s: ProjectStatus) {
 // ── AppContent ───────────────────────────────────────────────────────────────
 function AppContent() {
   const settings = useSettings();
-  const { user, profile, isAuthenticated, isPasswordRecovery } = useAuth();
+  const { user, profile, isAuthenticated, isPasswordRecovery, isLoading, isConfigured } = useAuth();
+  const toast = useToast();
 
   const [page, setPage] = useState<Page>(() => {
     const landing = settingsStore.getSettings().defaultLandingPage;
@@ -97,6 +104,37 @@ function AppContent() {
     settingsStore.applyTheme(settings.theme);
   }, [settings.theme]);
 
+  // Dynamic document title update (SEO & UX)
+  useEffect(() => {
+    const titles: Record<Page, string> = {
+      dashboard: "Dashboard — Faceless Art Studio",
+      projects: "My Projects — Faceless Art Studio",
+      editor: "Create Video — Faceless Art Studio",
+      templates: "Templates — Faceless Art Studio",
+      media: "Media Library — Faceless Art Studio",
+      settings: "Settings — Faceless Art Studio",
+      help: "Help Center — Faceless Art Studio",
+      privacy: "Privacy Policy — Faceless Art Studio",
+      terms: "Terms of Service — Faceless Art Studio",
+      login: "Sign In — Faceless Art Studio",
+      signup: "Sign Up — Faceless Art Studio",
+      "forgot-password": "Reset Password — Faceless Art Studio",
+      "reset-password": "Set New Password — Faceless Art Studio",
+    };
+    document.title = titles[page] || "Faceless Art Studio";
+  }, [page]);
+
+  // Keyboard shortcut: Escape closes expanded sidebar on mobile
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && sidebarExpanded) {
+        setSidebarExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarExpanded]);
+
   const userDisplayName = isAuthenticated
     ? profile?.display_name || user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Creator"
     : settings.displayName || "Guest Studio";
@@ -108,25 +146,45 @@ function AppContent() {
   const userInitials = (userDisplayName.trim() || "A").slice(0, 2).toUpperCase();
 
   const go = (next: Page) => {
+    if (window.innerWidth <= 768) {
+      setSidebarExpanded(false);
+    }
     setPage(next);
   };
 
-  if (page === "login") {
-    return <LoginPage onNavigate={(p) => go(p as Page)} onSuccess={() => go("dashboard")} />;
-  }
-  if (page === "signup") {
-    return <SignUpPage onNavigate={(p) => go(p as Page)} onSuccess={() => go("dashboard")} />;
-  }
-  if (page === "forgot-password") {
-    return <ForgotPasswordPage onNavigate={(p) => go(p as Page)} />;
-  }
-  if (page === "reset-password") {
-    return <ResetPasswordPage onNavigate={(p) => go(p as Page)} />;
+  // 1. Session restoration loading splash
+  if (isConfigured && isLoading) {
+    return (
+      <div
+        className="studio-loader-splash"
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#101216",
+          color: "#FFF",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <img
+            src={logoSrc}
+            alt="Faceless Art Studio Logo"
+            style={{ width: 56, height: 56, marginBottom: 16 }}
+            className="skeleton-pulse"
+          />
+          <div style={{ fontFamily: "Manrope, sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+            Faceless Art Studio
+          </div>
+          <div style={{ color: "#8C94A0", fontSize: 13 }}>Restoring your studio workspace...</div>
+        </div>
+      </div>
+    );
   }
 
   const handleUseTemplate = (template: TemplateConfig) => {
     setSelectedTemplate(template);
     setSelectedSourceVideo(null);
+    toast.success(`Loaded "${template.name}" template in Editor`);
     setPage("editor");
   };
 
@@ -139,20 +197,71 @@ function AppContent() {
       size: asset.size,
     });
     setSelectedTemplate(null);
+    toast.info(`Selected "${asset.name}" as source video`);
     setPage("editor");
   };
 
-  return (
-    <div className="app">
-      {/* ── Unified Shared Header (Logo + Brand | Search | Notifications + User) ── */}
-      <AppHeader
-        activePage={page}
-        onNavigate={(p, targetId) => {
-          if (targetId) setSelectedProjectId(targetId);
-          go(p);
-        }}
-        onToggleSidebar={() => setSidebarExpanded((v) => !v)}
-      />
+  // 2. Strict Authentication Guard for Private Routes
+  let pageContent: React.ReactNode = null;
+
+  if (isConfigured && !isAuthenticated) {
+    if (page === "signup") {
+      pageContent = <SignUpPage onNavigate={(p) => go(p as Page)} onSuccess={() => go("dashboard")} />;
+    } else if (page === "forgot-password") {
+      pageContent = <ForgotPasswordPage onNavigate={(p) => go(p as Page)} />;
+    } else if (page === "reset-password") {
+      pageContent = <ResetPasswordPage onNavigate={(p) => go(p as Page)} />;
+    } else if (page === "privacy") {
+      pageContent = (
+        <Suspense fallback={<PageSkeletonLoader />}>
+          <PrivacyPage onBack={() => go("login")} onNavigateTerms={() => go("terms")} />
+        </Suspense>
+      );
+    } else if (page === "terms") {
+      pageContent = (
+        <Suspense fallback={<PageSkeletonLoader />}>
+          <TermsPage onBack={() => go("login")} onNavigatePrivacy={() => go("privacy")} />
+        </Suspense>
+      );
+    } else if (page === "help") {
+      pageContent = (
+        <div className="app">
+          <AppHeader activePage={page} onNavigate={(p) => go(p)} onToggleSidebar={() => setSidebarExpanded((v) => !v)} />
+          <div className="main" style={{ marginLeft: 0, width: "100%" }}>
+            <Suspense fallback={<PageSkeletonLoader />}>
+              <HelpPage initialSection={helpSection} />
+            </Suspense>
+          </div>
+        </div>
+      );
+    } else {
+      // Protected pages: dashboard, projects, editor, templates, media, settings -> render LoginPage
+      pageContent = (
+        <LoginPage
+          onNavigate={(p) => go(p as Page)}
+          onSuccess={() => go(page === "login" ? "dashboard" : page)}
+        />
+      );
+    }
+  } else if (page === "login" || page === "signup") {
+    // If already authenticated, redirect to dashboard
+    pageContent = <Dashboard onNavigate={go} />;
+  } else if (page === "forgot-password") {
+    pageContent = <ForgotPasswordPage onNavigate={(p) => go(p as Page)} />;
+  } else if (page === "reset-password") {
+    pageContent = <ResetPasswordPage onNavigate={(p) => go(p as Page)} />;
+  } else {
+    pageContent = (
+      <div className="app">
+        {/* ── Unified Shared Header (Logo + Brand | Search | Notifications + User) ── */}
+        <AppHeader
+          activePage={page}
+          onNavigate={(p, targetId) => {
+            if (targetId) setSelectedProjectId(targetId);
+            go(p);
+          }}
+          onToggleSidebar={() => setSidebarExpanded((v) => !v)}
+        />
 
       <aside ref={sidebarRef} className={`sidebar ${sidebarExpanded ? "expanded" : ""}`}>
         <div className="brand">
@@ -234,25 +343,69 @@ function AppContent() {
         </div>
       </aside>
 
+      {/* Mobile backdrop overlay */}
+      {sidebarExpanded && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarExpanded(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="main">
-        {page === "dashboard"
-          ? <Dashboard onNavigate={go} />
-          : page === "projects"
-            ? <ProjectsPage onNavigate={go} initialSelectedProjectId={selectedProjectId} />
-            : page === "templates"
-              ? <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
-              : page === "media"
-                ? <MediaLibraryPage onUseInEditor={handleUseMediaInEditor} onNavigateEditor={() => go("editor")} onNavigateProjects={() => go("projects")} />
-                : page === "editor"
-                  ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={(targetId) => { if (targetId) setSelectedProjectId(targetId); go("projects"); }} initialTemplate={selectedTemplate} initialVideo={selectedSourceVideo} />
-                  : page === "settings"
-                    ? <SettingsPage onNavigateHelp={(targetSec) => { if (targetSec) setHelpSection(targetSec); setPage("help"); }} onNavigateAuth={(p) => go(p as Page)} />
-                    : page === "help"
-                      ? <HelpPage initialSection={helpSection} />
-                      : <ProgressPage page={page} onBack={() => go("dashboard")} />}
+        <Suspense fallback={<PageSkeletonLoader />}>
+          {page === "dashboard" ? (
+            <Dashboard onNavigate={go} />
+          ) : page === "projects" ? (
+            <ProjectsPage onNavigate={go} initialSelectedProjectId={selectedProjectId} />
+          ) : page === "templates" ? (
+            <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
+          ) : page === "media" ? (
+            <MediaLibraryPage
+              onUseInEditor={handleUseMediaInEditor}
+              onNavigateEditor={() => go("editor")}
+              onNavigateProjects={() => go("projects")}
+            />
+          ) : page === "editor" ? (
+            <EditorPage
+              onBack={() => go("dashboard")}
+              onNavigateProjects={(targetId) => {
+                if (targetId) setSelectedProjectId(targetId);
+                go("projects");
+              }}
+              initialTemplate={selectedTemplate}
+              initialVideo={selectedSourceVideo}
+            />
+          ) : page === "settings" ? (
+            <SettingsPage
+              onNavigateHelp={(targetSec) => {
+                if (targetSec) setHelpSection(targetSec);
+                setPage("help");
+              }}
+              onNavigateAuth={(p) => go(p as Page)}
+              onNavigateLegal={(target) => go(target)}
+            />
+          ) : page === "help" ? (
+            <HelpPage initialSection={helpSection} />
+          ) : page === "privacy" ? (
+            <PrivacyPage onBack={() => go("dashboard")} onNavigateTerms={() => go("terms")} />
+          ) : page === "terms" ? (
+            <TermsPage onBack={() => go("dashboard")} onNavigatePrivacy={() => go("privacy")} />
+          ) : (
+            <ProgressPage page={page} onBack={() => go("dashboard")} />
+          )}
+        </Suspense>
       </div>
 
     </div>
+    );
+  }
+
+  return (
+    <>
+      {pageContent}
+      <CookieConsentBanner onNavigate={(target) => go(target)} />
+    </>
   );
 }
 
@@ -287,7 +440,13 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
             action={projects.length > 0 ? "View all" : undefined}
             onClick={() => onNavigate("projects")}
           />
-          {projects.length === 0 ? (
+          {projectStore.getIsLoading() ? (
+            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} style={{ height: 44, background: "rgba(255,255,255,0.03)", borderRadius: 8, animation: "skeletonPulse 1.5s infinite" }} />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
             <Empty
               icon={<FolderKanban />}
               title="No projects yet"
@@ -393,6 +552,7 @@ function ProjectsPage({
   initialSelectedProjectId?: string | null;
 }) {
   const { isAuthenticated, session } = useAuth();
+  const toast = useToast();
   const projects = useProjects();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterStatus>("all");
@@ -459,12 +619,14 @@ function ProjectsPage({
     const trimmed = renameVal.trim();
     if (trimmed) {
       projectStore.updateProject(id, { title: trimmed });
+      toast.success("Project renamed");
     }
     setRenaming(null);
   };
 
   const handleDuplicate = (id: string) => {
     projectStore.duplicateProject(id);
+    toast.success("Project duplicated");
     setMenuOpen(null);
   };
 
@@ -480,6 +642,7 @@ function ProjectsPage({
       }
     }
     await projectStore.deleteProject(id);
+    toast.success("Project deleted");
     setMenuOpen(null);
     if (selected?.id === id) setSelected(null);
   };
@@ -759,7 +922,9 @@ function ProgressPage({ page, onBack }: { page: Page; onBack: () => void }) {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

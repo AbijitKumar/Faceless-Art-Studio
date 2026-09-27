@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   RefreshCw,
   ChevronLeft,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { signUpWithPassword, signInWithGoogle, signInWithGitHub } from "./authService";
 import { useAuth } from "./useAuth";
@@ -70,6 +72,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -377,14 +381,36 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
                 <Lock size={16} color="#4B5563" style={{ position: "absolute", left: 14, top: 14 }} aria-hidden="true" />
                 <input
                   id="signup-password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="Minimum 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
-                  style={fieldBase}
+                  style={{ ...fieldBase, paddingRight: 42 }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    padding: 6,
+                    color: "#9CA3AF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                  }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -400,14 +426,36 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
                 <Lock size={16} color="#4B5563" style={{ position: "absolute", left: 14, top: 14 }} aria-hidden="true" />
                 <input
                   id="signup-confirm-password"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   placeholder="Repeat your password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   autoComplete="new-password"
-                  style={fieldBase}
+                  style={{ ...fieldBase, paddingRight: 42 }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    padding: 6,
+                    color: "#9CA3AF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                  }}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -475,6 +523,42 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
           >
             Sign in
           </button>
+        </div>
+
+        {/* ── Legal Links ── */}
+        <div style={{ marginTop: 20, textAlign: "center", fontSize: 12, color: "#64748B", lineHeight: 1.5 }}>
+          By creating an account, you agree to our{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("terms")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94A3B8",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Terms of Service
+          </button>{" "}
+          and{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("privacy")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94A3B8",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Privacy Policy
+          </button>.
         </div>
       </div>
     </div>

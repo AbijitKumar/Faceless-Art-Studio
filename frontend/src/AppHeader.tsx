@@ -19,6 +19,7 @@ import { useNotifications } from "./useNotifications";
 import { AppNotification } from "./notificationService";
 import { projectStore } from "./projectStore";
 import { useSettings } from "./settingsStore";
+import { useToast } from "./ToastContext";
 
 export type Page =
   | "dashboard"
@@ -28,6 +29,8 @@ export type Page =
   | "media"
   | "settings"
   | "help"
+  | "privacy"
+  | "terms"
   | "login"
   | "signup"
   | "forgot-password"
@@ -78,6 +81,7 @@ function useCloseOnOutsideAndEsc(
 export function AppHeader({ activePage, onNavigate, onToggleSidebar }: AppHeaderProps) {
   const { user, profile, isAuthenticated, signOut } = useAuth();
   const settings = useSettings();
+  const toast = useToast();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   // Search state
@@ -120,6 +124,15 @@ export function AppHeader({ activePage, onNavigate, onToggleSidebar }: AppHeader
     setSearchOpen(val.trim().length > 0);
   };
 
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Keyboard shortcut Cmd/Ctrl + K for search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -134,7 +147,7 @@ export function AppHeader({ activePage, onNavigate, onToggleSidebar }: AppHeader
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const q = searchQuery.toLowerCase().trim();
+  const q = debouncedQuery.toLowerCase().trim();
   const pageResults = q
     ? SEARCH_INDEX.filter(
         (item) =>
@@ -170,6 +183,12 @@ export function AppHeader({ activePage, onNavigate, onToggleSidebar }: AppHeader
         <div
           className="app-header-brand"
           onClick={() => onNavigate("dashboard")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onNavigate("dashboard");
+            }
+          }}
           role="button"
           tabIndex={0}
           title="Faceless Art Studio Home"
@@ -398,6 +417,7 @@ export function AppHeader({ activePage, onNavigate, onToggleSidebar }: AppHeader
                   <button
                     onClick={() => {
                       signOut();
+                      toast.info("Signed out of your account.");
                       closeUserMenu();
                     }}
                     className="danger-btn"

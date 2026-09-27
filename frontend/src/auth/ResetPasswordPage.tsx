@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Lock, ArrowRight, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import { Lock, ArrowRight, AlertCircle, CheckCircle2, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { updatePassword } from "./authService";
 import { useAuth } from "./useAuth";
+import { useToast } from "../ToastContext";
 import logoSrc from "../assets/logo.png";
 
 interface ResetPasswordPageProps {
@@ -23,8 +24,11 @@ const fieldBase: React.CSSProperties = {
 
 export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onNavigate }) => {
   const { clearPasswordRecoveryFlag } = useAuth();
+  const toast = useToast();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -45,6 +49,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onNavigate
     try {
       await updatePassword(password);
       setIsSuccess(true);
+      toast.success("Password updated successfully.");
       clearPasswordRecoveryFlag();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to update password.");
@@ -187,14 +192,36 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onNavigate
                 <Lock size={16} color="#4B5563" style={{ position: "absolute", left: 14, top: 14 }} aria-hidden="true" />
                 <input
                   id="reset-password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="At least 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
-                  style={fieldBase}
+                  style={{ ...fieldBase, paddingRight: 42 }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    padding: 6,
+                    color: "#9CA3AF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                  }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -216,14 +243,36 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onNavigate
                 <Lock size={16} color="#4B5563" style={{ position: "absolute", left: 14, top: 14 }} aria-hidden="true" />
                 <input
                   id="reset-confirm-password"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   placeholder="Repeat new password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   autoComplete="new-password"
-                  style={fieldBase}
+                  style={{ ...fieldBase, paddingRight: 42 }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    padding: 6,
+                    color: "#9CA3AF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                  }}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 

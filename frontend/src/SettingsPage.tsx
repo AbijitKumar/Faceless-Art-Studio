@@ -11,6 +11,10 @@ import {
   LogOut,
   UserCheck,
   Sparkles,
+  Trash2,
+  FileText,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import {
   settingsStore,
@@ -20,15 +24,22 @@ import {
   LandingPage,
 } from "./settingsStore";
 import { useAuth } from "./auth/useAuth";
+import { useToast } from "./ToastContext";
+import { supabase } from "./lib/supabase";
 
 interface SettingsPageProps {
   onNavigateHelp: (targetSection?: "about" | "video-flow" | "bug-report") => void;
   onNavigateAuth?: (page: string) => void;
+  onNavigateLegal?: (page: "privacy" | "terms") => void;
 }
 
-export function SettingsPage({ onNavigateHelp, onNavigateAuth }: SettingsPageProps) {
+export function SettingsPage({ onNavigateHelp, onNavigateAuth, onNavigateLegal }: SettingsPageProps) {
   const settings = useSettings();
-  const { user, profile, isAuthenticated, updateProfile, signOut } = useAuth();
+  const { user, session, profile, isAuthenticated, updateProfile, signOut } = useAuth();
+  const toast = useToast();
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const currentDisplayName = isAuthenticated
     ? profile?.display_name || user?.user_metadata?.display_name || user?.email?.split("@")[0] || ""
@@ -90,6 +101,32 @@ export function SettingsPage({ onNavigateHelp, onNavigateAuth }: SettingsPagePro
   const showSavedFeedback = () => {
     setSavedBadge(true);
     window.setTimeout(() => setSavedBadge(false), 1800);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || deleteConfirmText.trim().toUpperCase() !== "DELETE") return;
+    setIsDeleting(true);
+    try {
+      if (session?.access_token) {
+        await fetch("/api/account/cleanup", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }).catch((e) => console.warn("Backend cleanup error:", e));
+      }
+
+      await supabase.from("projects").delete().eq("user_id", user.id);
+      await supabase.from("notifications").delete().eq("user_id", user.id);
+      await supabase.from("profiles").delete().eq("id", user.id);
+
+      toast.success("Account data and media assets deleted successfully.");
+      setDeleteModalOpen(false);
+      await signOut();
+      onNavigateAuth?.("login");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete account data.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Derive user initials
@@ -498,7 +535,170 @@ export function SettingsPage({ onNavigateHelp, onNavigateAuth }: SettingsPagePro
             </div>
           </div>
         </article>
+
+        {/* ── 6. PRIVACY & TERMS ── */}
+        <article className="panel settings-section">
+          <div className="settings-sec-head">
+            <h2>Privacy &amp; Compliance</h2>
+            <p>Review our transparent data policies and terms of service.</p>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "16px 0 8px" }}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => onNavigateLegal?.("privacy")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <ShieldCheck size={15} color="var(--blue)" /> Privacy Policy
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => onNavigateLegal?.("terms")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <FileText size={15} color="var(--violet)" /> Terms of Service
+            </button>
+          </div>
+        </article>
+
+        {/* ── 7. DANGER ZONE: DATA & ACCOUNT DELETION ── */}
+        {isAuthenticated && (
+          <article className="panel settings-section" style={{ borderColor: "rgba(239, 68, 68, 0.3)" }}>
+            <div className="settings-sec-head">
+              <h2 style={{ color: "#F87171", display: "flex", alignItems: "center", gap: 8 }}>
+                <AlertTriangle size={18} /> Danger Zone
+              </h2>
+              <p>Permanently remove your studio projects, notifications, and generated media assets.</p>
+            </div>
+
+            <div className="settings-row" style={{ alignItems: "center" }}>
+              <div className="settings-label">
+                <strong>Delete Account &amp; Workspace Data</strong>
+                <span>
+                  Permanently deletes your database records and all generated video, audio, and subtitle files from the studio filesystem. This action cannot be undone.
+                </span>
+              </div>
+              <div className="settings-control">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteConfirmText("");
+                    setDeleteModalOpen(true);
+                  }}
+                  style={{
+                    backgroundColor: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid rgba(239, 68, 68, 0.4)",
+                    color: "#FCA5A5",
+                    padding: "9px 16px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Trash2 size={15} /> Delete Account Data
+                </button>
+              </div>
+            </div>
+          </article>
+        )}
       </div>
+
+      {/* Confirmation Modal */}
+      {deleteModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="del-modal-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(6px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#16181D",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              borderRadius: 14,
+              padding: "28px 24px",
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 24px 48px rgba(0,0,0,0.8)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#F87171", marginBottom: 12 }}>
+              <AlertTriangle size={24} />
+              <h3 id="del-modal-title" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                Confirm Permanent Deletion
+              </h3>
+            </div>
+            <p style={{ color: "#94A3B8", fontSize: 13.5, lineHeight: 1.5, marginBottom: 18 }}>
+              This will permanently delete your user profile, all projects, generated videos, voiceovers, subtitles, and notifications. This operation is immediate and irreversible.
+            </p>
+            <p style={{ color: "#F1F5F9", fontSize: 13, fontWeight: 500, marginBottom: 8 }}>
+              Type <strong>DELETE</strong> to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                backgroundColor: "#101216",
+                border: "1px solid #2D3139",
+                borderRadius: 8,
+                color: "#FFF",
+                fontSize: 14,
+                marginBottom: 20,
+                outline: "none",
+                fontFamily: "monospace",
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting || deleteConfirmText.trim().toUpperCase() !== "DELETE"}
+                style={{
+                  backgroundColor: "#DC2626",
+                  color: "#FFF",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "9px 18px",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: deleteConfirmText.trim().toUpperCase() === "DELETE" ? "pointer" : "not-allowed",
+                  opacity: deleteConfirmText.trim().toUpperCase() === "DELETE" ? 1 : 0.5,
+                }}
+              >
+                {isDeleting ? "Deleting..." : "Permanently Delete Everything"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Mail, ArrowRight, AlertCircle, CheckCircle2, RefreshCw, ChevronLeft } from "lucide-react";
 import { requestPasswordReset } from "./authService";
 import { useAuth } from "./useAuth";
+import { useToast } from "../ToastContext";
 import logoSrc from "../assets/logo.png";
 
 interface ForgotPasswordPageProps {
@@ -10,6 +11,7 @@ interface ForgotPasswordPageProps {
 
 export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNavigate }) => {
   const { isConfigured } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -26,6 +28,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
     try {
       await requestPasswordReset(email.trim());
       setSubmitted(true);
+      toast.success("Password reset instructions sent to your email.");
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to send password reset email.");
     } finally {

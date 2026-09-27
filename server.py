@@ -1,10 +1,15 @@
 import asyncio
+from collections import defaultdict
+import logging
 import os
+from pathlib import Path
 import random
 import re
+import shutil
+import time
 import traceback
-from pathlib import Path
 from typing import Any, Dict, List
+import uuid
 
 import aiohttp
 from aiohttp import web
@@ -12,6 +17,9 @@ import edge_tts
 
 from src.pipeline import run_pipeline
 from src.utils.files import safe_stem
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("faceless_studio")
 
 BASE_DIR = Path(__file__).resolve().parent
 INPUT_DIR = BASE_DIR / "input"
@@ -25,6 +33,7 @@ SUPPORTED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac", ".ogg"}
 SUPPORTED_SUBTITLE_EXTS = {".srt", ".ass", ".vtt"}
 SUPPORTED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
+ALL_ALLOWED_UPLOAD_EXTS = SUPPORTED_VIDEO_EXTS | SUPPORTED_AUDIO_EXTS | SUPPORTED_IMAGE_EXTS
 
 # In-memory job state tracking
 jobs: Dict[str, Dict[str, Any]] = {}
@@ -48,6 +57,7 @@ def _load_env_file():
 
 _load_env_file()
 
+DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "").strip().rstrip("/")
 SUPABASE_ANON_KEY = (
     os.getenv("SUPABASE_ANON_KEY") or
@@ -56,16 +66,44 @@ SUPABASE_ANON_KEY = (
     ""
 ).strip()
 
+MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "150")) * 1024 * 1024
+RATE_LIMIT_GENERATE = int(os.getenv("RATE_LIMIT_GENERATE", "10"))
+RATE_LIMIT_UPLOAD = int(os.getenv("RATE_LIMIT_UPLOAD", "20"))
+RATE_LIMIT_API = int(os.getenv("RATE_LIMIT_API", "120"))
+
+ALLOWED_ORIGINS = {
+    o.strip()
+    for o in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if o.strip()
+}
+
+# Simple sliding window rate limiter
+class InMemoryRateLimiter:
+    def __init__(self):
+        self.requests = defaultdict(list)
+
+    def is_allowed(self, key: str, max_requests: int, window_seconds: int = 60) -> tuple[bool, int]:
+        now = time.time()
+        timestamps = [t for t in self.requests[key] if now - t < window_seconds]
+        if len(timestamps) >= max_requests:
+            oldest = timestamps[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            self.requests[key] = timestamps
+            return False, retry_after
+        timestamps.append(now)
+        self.requests[key] = timestamps
+        return True, 0
+
+rate_limiter = InMemoryRateLimiter()
+
 
 async def verify_supabase_token(request: web.Request) -> tuple[bool, str | None, dict | None]:
     """
     Validates the Supabase Bearer token against the Supabase Auth API.
     Returns: (is_valid: bool, error_code: str | None, user_data: dict | None)
-
-    Error codes:
-      - 'AUTH_NOT_CONFIGURED': Supabase URL or Anon Key is missing in environment
-      - 'TOKEN_MISSING': No Bearer token provided in Authorization header or query param
-      - 'INVALID_TOKEN': Token verification failed or token expired
     """
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         return False, "AUTH_NOT_CONFIGURED", None
@@ -96,7 +134,7 @@ async def verify_supabase_token(request: web.Request) -> tuple[bool, str | None,
                 else:
                     return False, "INVALID_TOKEN", None
     except Exception as exc:
-        print(f"[AUTH ERROR] Failed to connect to Supabase Auth API: {exc}")
+        logger.error(f"Failed to connect to Supabase Auth API: {exc}")
         return False, "INVALID_TOKEN", None
 
 
@@ -122,7 +160,7 @@ def get_available_input_videos() -> List[Dict[str, Any]]:
 def get_all_media_assets(user_id: str | None = None) -> Dict[str, Any]:
     """Scan input and output directories and return all real creative assets, scoped to user if specified."""
     assets: List[Dict[str, Any]] = []
-    
+
     # 1. Input directory (source videos and images) - shared creative inputs
     if INPUT_DIR.exists():
         for p in sorted(INPUT_DIR.rglob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -131,7 +169,7 @@ def get_all_media_assets(user_id: str | None = None) -> Dict[str, Any]:
             ext = p.suffix.lower()
             rel_path = p.relative_to(BASE_DIR).as_posix()
             stat = p.stat()
-            
+
             media_type = None
             if ext in SUPPORTED_VIDEO_EXTS:
                 media_type = "video"
@@ -222,7 +260,7 @@ def get_all_media_assets(user_id: str | None = None) -> Dict[str, Any]:
             "subtitles": subtitle_count,
             "images": image_count,
             "totalSizeBytes": total_size,
-        }
+        },
     }
 
 
@@ -234,12 +272,16 @@ async def get_media_library(request: web.Request) -> web.Response:
         data = get_all_media_assets(caller_user_id)
         return web.json_response(data)
     except Exception as exc:
-        traceback.print_exc()
-        return web.json_response({"error": f"Failed to list media assets: {exc}"}, status=500)
+        logger.error(f"Failed to list media assets: {exc}")
+        if DEBUG:
+            return web.json_response({"error": f"Failed to list media assets: {exc}"}, status=500)
+        return web.json_response({"error": "Failed to list media assets."}, status=500)
 
 
 @web.middleware
-async def cors_middleware(request, handler):
+async def cors_and_security_middleware(request: web.Request, handler):
+    origin = request.headers.get("Origin", "")
+
     if request.method == "OPTIONS":
         response = web.Response(status=200)
     else:
@@ -248,12 +290,34 @@ async def cors_middleware(request, handler):
         except web.HTTPException as ex:
             response = ex
         except Exception as ex:
-            response = web.json_response({"error": str(ex)}, status=500)
+            logger.error(f"Unhandled server error on {request.method} {request.path}: {ex}", exc_info=True)
+            if DEBUG:
+                response = web.json_response({"error": str(ex)}, status=500)
+            else:
+                response = web.json_response({"error": "An internal server error occurred."}, status=500)
 
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    # CORS configuration
+    if origin:
+        if origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS or DEBUG:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+    elif DEBUG:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Range, Authorization"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Range, Authorization, X-Requested-With"
     response.headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges, Content-Disposition"
+
+    # Security Headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
+    if request.secure or request.headers.get("X-Forwarded-Proto") == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
     return response
 
 
@@ -272,7 +336,8 @@ async def get_voices(request: web.Request) -> web.Response:
             })
         return web.json_response({"voices": voices})
     except Exception as exc:
-        return web.json_response({"error": f"Failed to fetch voices: {exc}"}, status=500)
+        logger.error(f"Failed to fetch voices: {exc}")
+        return web.json_response({"error": "Failed to fetch voices."}, status=500)
 
 
 async def get_input_files(request: web.Request) -> web.Response:
@@ -294,33 +359,83 @@ async def get_random_input(request: web.Request) -> web.Response:
 
 
 async def upload_video(request: web.Request) -> web.Response:
-    """Handle multipart file upload for source video."""
-    is_valid, _, user_data = await verify_supabase_token(request)
-    caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+    """Handle multipart file upload for source video with strict validation and rate limiting."""
+    is_valid, err_code, user_data = await verify_supabase_token(request)
+    if err_code == "AUTH_NOT_CONFIGURED":
+        return web.json_response({
+            "error": "Authentication backend is not configured on the server."
+        }, status=503)
+    if not is_valid:
+        return web.json_response({
+            "error": "Unauthorized: A valid authenticated session is required to upload media."
+        }, status=401)
 
-    reader = await request.multipart()
+    caller_user_id = user_data.get("id") if user_data else None
+    client_ip = request.remote or "unknown"
+    rate_key = f"upload_{caller_user_id or client_ip}"
+    allowed, retry_after = rate_limiter.is_allowed(rate_key, RATE_LIMIT_UPLOAD, window_seconds=60)
+    if not allowed:
+        return web.json_response(
+            {"error": f"Upload rate limit exceeded. Please wait {retry_after} seconds before uploading again."},
+            status=429,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    try:
+        reader = await request.multipart()
+    except Exception:
+        return web.json_response({"error": "Invalid multipart payload."}, status=400)
+
     field = await reader.next()
     if not field or field.name != "file":
         return web.json_response({"error": "No 'file' field provided in multipart form."}, status=400)
 
-    filename = field.filename or "uploaded_video.mp4"
-    safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", filename)
-    target_path = UPLOADS_DIR / safe_name
+    raw_filename = field.filename or "uploaded_video.mp4"
+    file_ext = Path(raw_filename).suffix.lower()
+
+    if file_ext not in ALL_ALLOWED_UPLOAD_EXTS:
+        return web.json_response({
+            "error": f"Unsupported file type '{file_ext}'. Allowed formats: {', '.join(sorted(ALL_ALLOWED_UPLOAD_EXTS))}"
+        }, status=400)
+
+    # Server-generated safe filename with unique prefix to prevent overwrite/collision
+    safe_stem_part = safe_stem(Path(raw_filename).stem)[:40] or "media"
+    unique_prefix = uuid.uuid4().hex[:10]
+    safe_name = f"{unique_prefix}_{safe_stem_part}{file_ext}"
+    target_path = (UPLOADS_DIR / safe_name).resolve()
+
+    # Path traversal check
+    if not str(target_path).startswith(str(UPLOADS_DIR.resolve())):
+        return web.json_response({"error": "Invalid destination path."}, status=400)
 
     size = 0
-    with open(target_path, "wb") as f:
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            size += len(chunk)
-            f.write(chunk)
+    try:
+        with open(target_path, "wb") as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_SIZE_BYTES:
+                    # Abort and clean up partial file
+                    f.close()
+                    if target_path.exists():
+                        target_path.unlink(missing_ok=True)
+                    return web.json_response({
+                        "error": f"File exceeds maximum allowed size of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."
+                    }, status=413)
+                f.write(chunk)
+    except Exception as exc:
+        if target_path.exists():
+            target_path.unlink(missing_ok=True)
+        logger.error(f"Upload write error: {exc}")
+        return web.json_response({"error": "Failed to save uploaded file."}, status=500)
 
     rel_path = target_path.relative_to(BASE_DIR).as_posix()
     return web.json_response({
         "success": True,
         "name": safe_name,
-        "path": str(target_path.resolve()),
+        "path": str(target_path),
         "relPath": rel_path,
         "url": f"/{rel_path}",
         "size": size,
@@ -357,7 +472,7 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
             source_filename = video_path.name
 
         if not video_path.exists():
-            raise FileNotFoundError(f"Source video file not found at: {video_path}")
+            raise FileNotFoundError(f"Source video file not found: {source_filename}")
 
         jobs[job_id]["source_video"] = source_filename
         jobs[job_id]["status"] = "processing"
@@ -413,14 +528,18 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
         }
 
     except Exception as exc:
-        traceback.print_exc()
+        logger.error(f"Pipeline execution failed for job {job_id}: {exc}", exc_info=True)
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["stage"] = "failed"
-        jobs[job_id]["error"] = str(exc)
+        # Sanitize error message to prevent leaking server paths
+        err_msg = str(exc)
+        if str(BASE_DIR) in err_msg:
+            err_msg = err_msg.replace(str(BASE_DIR), "[studio_root]")
+        jobs[job_id]["error"] = err_msg if DEBUG else "Video generation failed. Please check your script and settings."
 
 
 async def generate_video(request: web.Request) -> web.Response:
-    """Start video generation job asynchronously."""
+    """Start video generation job asynchronously with strict input validation."""
     is_valid, err_code, user_data = await verify_supabase_token(request)
     if err_code == "AUTH_NOT_CONFIGURED":
         return web.json_response({
@@ -432,21 +551,98 @@ async def generate_video(request: web.Request) -> web.Response:
         }, status=401)
 
     caller_user_id = user_data.get("id") if user_data else None
+    client_ip = request.remote or "unknown"
+    rate_key = f"gen_{caller_user_id or client_ip}"
+    allowed, retry_after = rate_limiter.is_allowed(rate_key, RATE_LIMIT_GENERATE, window_seconds=60)
+    if not allowed:
+        return web.json_response(
+            {"error": f"Generation rate limit exceeded. Please wait {retry_after} seconds before starting another video."},
+            status=429,
+            headers={"Retry-After": str(retry_after)},
+        )
 
     try:
         payload = await request.json()
     except Exception:
         return web.json_response({"error": "Invalid JSON body."}, status=400)
 
-    text = payload.get("text", "").strip()
-    raw_title = payload.get("title", "").strip() or "Untitled Video"
-    # Sanitize title for filesystem safety
-    safe_title = re.sub(r'[\\/*?:"<>|]', "", raw_title).strip() or "Untitled Video"
+    # 1. Script validation
+    text = payload.get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        return web.json_response({"error": "Script text is required and cannot be empty."}, status=400)
+    if len(text.strip()) > 100000:
+        return web.json_response({"error": "Script text is too long (maximum 100,000 characters)."}, status=400)
+    text = text.strip()
 
-    if not text:
-        return web.json_response({"error": "Script text is required."}, status=400)
+    # 2. Title validation
+    raw_title = payload.get("title", "")
+    if not isinstance(raw_title, str):
+        raw_title = "Untitled Video"
+    safe_title = re.sub(r'[\\/*?:"<>|]', "", raw_title).strip()[:150] or "Untitled Video"
 
-    # Check input videos availability
+    # 3. Voice validation
+    voice = payload.get("voice", "en-US-AriaNeural")
+    if not isinstance(voice, str) or not re.match(r"^[a-zA-Z0-9_\-\+]+$", voice):
+        voice = "en-US-AriaNeural"
+
+    # 4. Whisper model validation
+    whisper_model = payload.get("whisper_model", "small")
+    if whisper_model not in {"tiny", "base", "small", "medium", "large"}:
+        whisper_model = "small"
+
+    # 5. Language validation
+    language = payload.get("language", "en")
+    if not isinstance(language, str) or not re.match(r"^[a-zA-Z0-9_\-]+$", language):
+        language = "en"
+
+    # 6. Video settings validation
+    video_settings = payload.get("video_settings", {})
+    if not isinstance(video_settings, dict):
+        video_settings = {}
+    aspect_ratio = video_settings.get("aspect_ratio", "9:16")
+    if aspect_ratio not in {"9:16", "16:9", "1:1"}:
+        aspect_ratio = "9:16"
+    resolution = video_settings.get("resolution", "1080p")
+    if resolution not in {"720p", "1080p", "4K"}:
+        resolution = "1080p"
+    video_settings["aspect_ratio"] = aspect_ratio
+    video_settings["resolution"] = resolution
+
+    # 7. Caption settings validation
+    caption_settings = payload.get("caption_settings", {})
+    if not isinstance(caption_settings, dict):
+        caption_settings = {}
+    preset = caption_settings.get("preset", "bold")
+    if preset not in {"bold", "neon", "classic", "minimal", "karaoke", "creator"}:
+        preset = "bold"
+    caption_settings["preset"] = preset
+
+    # Hex colors validation
+    hex_color_re = re.compile(r"^#[0-9a-fA-F]{6}$")
+    for color_field, default_val in [
+        ("primary_color", "#FFFFFF"),
+        ("highlight_color", "#FFDC28"),
+        ("outline_color", "#000000"),
+    ]:
+        val = caption_settings.get(color_field, default_val)
+        if not isinstance(val, str) or not hex_color_re.match(val):
+            caption_settings[color_field] = default_val
+
+    # Numeric bounds
+    try:
+        caption_settings["font_size"] = max(10, min(200, int(caption_settings.get("font_size", 78))))
+        caption_settings["alignment"] = max(1, min(9, int(caption_settings.get("alignment", 2))))
+        caption_settings["outline"] = max(0, min(20, int(caption_settings.get("outline", 5))))
+        caption_settings["shadow"] = max(0, min(20, int(caption_settings.get("shadow", 2))))
+        caption_settings["max_words"] = max(1, min(20, int(caption_settings.get("max_words", 4))))
+    except (ValueError, TypeError):
+        caption_settings["font_size"] = 78
+        caption_settings["alignment"] = 2
+        caption_settings["outline"] = 5
+        caption_settings["shadow"] = 2
+        caption_settings["max_words"] = 4
+
+    # 8. Source video path validation - prevent directory traversal / arbitrary system paths
     available_videos = get_available_input_videos()
     raw_video_path = payload.get("video_path", "").strip()
 
@@ -455,7 +651,6 @@ async def generate_video(request: web.Request) -> web.Response:
             return web.json_response({
                 "error": "No source videos are available in the input folder."
             }, status=400)
-        # Choose a random video right away for transparency
         selected = random.choice(available_videos)
         payload["video_path"] = selected["path"]
         source_name = selected["name"]
@@ -463,14 +658,41 @@ async def generate_video(request: web.Request) -> web.Response:
         v_path = Path(raw_video_path)
         if not v_path.is_absolute():
             v_path = (BASE_DIR / raw_video_path).resolve()
+        else:
+            v_path = v_path.resolve()
+
+        # Path restriction: MUST be in INPUT_DIR, UPLOADS_DIR, or user's directory
+        allowed_parents = [
+            INPUT_DIR.resolve(),
+            UPLOADS_DIR.resolve(),
+            (OUTPUT_DIR / "users" / str(caller_user_id)).resolve(),
+        ]
+        is_safe_path = any(str(v_path).startswith(str(p)) for p in allowed_parents)
+        if not is_safe_path:
+            return web.json_response({
+                "error": "Invalid source video path: Path must reside in an approved media folder."
+            }, status=400)
+
         if not v_path.exists():
             return web.json_response({
-                "error": f"Source video not found: {raw_video_path}"
+                "error": f"Source video not found: {v_path.name}"
             }, status=400)
         source_name = v_path.name
 
-    job_id = payload.get("job_id") or os.urandom(6).hex()
+    # 9. Job ID validation
+    job_id = payload.get("job_id")
+    if not job_id or not isinstance(job_id, str) or not re.match(r"^[a-zA-Z0-9_\-]{4,64}$", job_id):
+        job_id = os.urandom(6).hex()
 
+    # Overwrite payload with validated sanitized parameters
+    payload["job_id"] = job_id
+    payload["title"] = safe_title
+    payload["text"] = text
+    payload["voice"] = voice
+    payload["whisper_model"] = whisper_model
+    payload["language"] = language
+    payload["video_settings"] = video_settings
+    payload["caption_settings"] = caption_settings
     payload["user_id"] = caller_user_id
 
     jobs[job_id] = {
@@ -498,7 +720,7 @@ async def generate_video(request: web.Request) -> web.Response:
 
 
 async def get_job_status(request: web.Request) -> web.Response:
-    """Get status of a generation job."""
+    """Get status of a generation job with ownership validation."""
     is_valid, err_code, user_data = await verify_supabase_token(request)
     if err_code == "AUTH_NOT_CONFIGURED":
         return web.json_response({
@@ -509,7 +731,7 @@ async def get_job_status(request: web.Request) -> web.Response:
             "error": "Unauthorized: A valid session is required to check job status."
         }, status=401)
 
-    job_id = request.match_info.get("job_id", "")
+    job_id = request.match_info.get("job_id", "").strip()
     if job_id not in jobs:
         return web.json_response({"error": f"Job {job_id} not found."}, status=404)
 
@@ -559,7 +781,6 @@ async def download_user_file(request: web.Request) -> web.Response:
     target_path = None
     for cand in candidate_paths:
         if cand.exists() and cand.is_file():
-            # Confirm resolved path is inside base_user_job_dir
             if str(cand.resolve()).startswith(str(base_user_job_dir)):
                 target_path = cand
                 break
@@ -600,8 +821,39 @@ async def download_user_file(request: web.Request) -> web.Response:
     )
 
 
+async def stream_user_output(request: web.Request) -> web.Response:
+    """
+    Safely stream private user-scoped media files with strict token and ownership verification.
+    Prevents unauthorized access to other accounts' generated videos, audio, and subtitles.
+    """
+    is_valid, err_code, user_data = await verify_supabase_token(request)
+    if not is_valid:
+        return web.json_response({
+            "error": "Unauthorized: A valid session is required to access private generated media."
+        }, status=401)
+
+    caller_user_id = user_data.get("id") if user_data else None
+    target_user_id = request.match_info.get("user_id", "").strip()
+    job_id = request.match_info.get("job_id", "").strip()
+    rest = request.match_info.get("rest", "").strip()
+
+    if not caller_user_id or caller_user_id != target_user_id:
+        return web.json_response({
+            "error": "Forbidden: You do not have permission to access another account's generated media."
+        }, status=403)
+
+    user_job_dir = (OUTPUT_DIR / "users" / target_user_id / job_id).resolve()
+    target_file = (user_job_dir / rest).resolve()
+
+    # Enforce file is strictly within user_job_dir
+    if not str(target_file).startswith(str(user_job_dir)) or not target_file.exists() or not target_file.is_file():
+        return web.json_response({"error": "Media file not found."}, status=404)
+
+    return web.FileResponse(target_file)
+
+
 async def download_file(request: web.Request) -> web.Response:
-    """Safely stream/download any media file from approved directories."""
+    """Safely stream/download media files from approved directories."""
     filename = request.match_info.get("filename", "")
     safe_filename = Path(filename).name
 
@@ -613,6 +865,7 @@ async def download_file(request: web.Request) -> web.Response:
         UPLOADS_DIR / safe_filename,
     ]
 
+    # Only search user folder if caller is authenticated
     if caller_user_id:
         user_folder = OUTPUT_DIR / "users" / str(caller_user_id)
         if user_folder.exists():
@@ -653,16 +906,12 @@ async def download_file(request: web.Request) -> web.Response:
     }
     content_type = content_types.get(ext, "application/octet-stream")
 
-    # Determine desired download filename from query parameter or default
     custom_title = request.query.get("title", "").strip()
     if custom_title:
         clean_name = re.sub(r'[\\/*?:"<>|]', "", custom_title).strip().rstrip(". ")
         if not clean_name:
             clean_name = target_path.stem
-        if not clean_name.lower().endswith(ext):
-            download_display_name = f"{clean_name}{ext}"
-        else:
-            download_display_name = clean_name
+        download_display_name = f"{clean_name}{ext}" if not clean_name.lower().endswith(ext) else clean_name
     else:
         download_display_name = safe_filename
 
@@ -675,9 +924,33 @@ async def download_file(request: web.Request) -> web.Response:
     )
 
 
+async def cleanup_user_account(request: web.Request) -> web.Response:
+    """Safely delete all generated filesystem objects for the authenticated user."""
+    is_valid, err_code, user_data = await verify_supabase_token(request)
+    if not is_valid:
+        return web.json_response({"error": "Unauthorized: Session token required for account cleanup."}, status=401)
+
+    caller_user_id = user_data.get("id") if user_data else None
+    if not caller_user_id:
+        return web.json_response({"error": "Invalid user identity."}, status=400)
+
+    user_dir = (OUTPUT_DIR / "users" / str(caller_user_id)).resolve()
+    if user_dir.exists() and str(user_dir).startswith(str(OUTPUT_DIR.resolve())):
+        try:
+            shutil.rmtree(user_dir, ignore_errors=True)
+            logger.info(f"Cleaned up filesystem data for user {caller_user_id}")
+        except Exception as exc:
+            logger.error(f"Error during account cleanup for {caller_user_id}: {exc}")
+            return web.json_response({"error": "Failed to delete user media assets."}, status=500)
+
+    return web.json_response({
+        "success": True,
+        "message": "User media assets cleaned up successfully.",
+    })
+
 
 def make_app() -> web.Application:
-    app = web.Application(middlewares=[cors_middleware])
+    app = web.Application(middlewares=[cors_and_security_middleware])
 
     # API routes
     app.router.add_get("/api/voices", get_voices)
@@ -689,9 +962,18 @@ def make_app() -> web.Application:
     app.router.add_get("/api/jobs/{job_id}", get_job_status)
     app.router.add_get("/api/download/{user_id}/{job_id}/{filename}", download_user_file)
     app.router.add_get("/api/download/{filename}", download_file)
+    app.router.add_post("/api/account/cleanup", cleanup_user_account)
 
-    # Static media routes for preview and video streaming (show_index disabled for security)
-    app.router.add_static("/output", OUTPUT_DIR, show_index=False)
+    # Protected account-scoped media streaming route
+    app.router.add_get("/output/users/{user_id}/{job_id}/{rest:.*}", stream_user_output)
+
+    # Static shared media routes (show_index disabled for security)
+    # Notice: /output/users is protected above and NOT exposed via static routes!
+    for legacy_folder in ["videos", "voiceovers", "subtitles"]:
+        sub = OUTPUT_DIR / legacy_folder
+        sub.mkdir(parents=True, exist_ok=True)
+        app.router.add_static(f"/output/{legacy_folder}", sub, show_index=False)
+
     app.router.add_static("/input", INPUT_DIR, show_index=False)
 
     return app
@@ -702,4 +984,3 @@ if __name__ == "__main__":
     print("=== Faceless Art Studio API Server ===")
     print("Running on http://127.0.0.1:8000")
     web.run_app(app, host="127.0.0.1", port=8000)
-

@@ -26,6 +26,7 @@ import {
   X,
   AlertCircle,
   Plus,
+  RefreshCw,
 } from "lucide-react";
 import logoSrc from "./assets/logo.png";
 import {
@@ -47,6 +48,7 @@ import { settingsStore } from "./settingsStore";
 import { TemplateConfig } from "./templates";
 import { useAuth } from "./auth/useAuth";
 import { AuthModal } from "./auth/AuthModal";
+import { useToast } from "./ToastContext";
 
 export interface EditorPageProps {
   onBack: () => void;
@@ -94,6 +96,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const { isAuthenticated, session, user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const toast = useToast();
 
   // ── Video File Upload State ──────────────────────────────────────────────────
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
@@ -312,6 +315,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
         return;
       }
       setScriptText(content.trim());
+      toast.success(`Imported script from ${file.name}`);
       // Optionally use file name without extension as project title
       const rawBase = file.name.replace(/\.txt$/i, "").trim();
       if (rawBase && (!projectTitle || projectTitle === "My Faceless Video" || projectTitle === "Untitled Video")) {
@@ -320,6 +324,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     };
     reader.onerror = () => {
       setScriptError("Failed to read the .txt file. Please check file permissions.");
+      toast.error("Failed to read the script file.");
     };
     reader.readAsText(file, "utf-8");
   };
@@ -363,12 +368,15 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
       };
       setAvailableVideos((prev) => [newVideo, ...prev.filter((v) => v.name !== newVideo.name)]);
       setSelectedVideo(newVideo);
+      toast.success(`Uploaded ${res.name || file.name}`);
       if (videoRef.current) {
         videoRef.current.src = newVideo.url;
         videoRef.current.load();
       }
     } catch (err: any) {
-      setSourceVideoError(err.message || "Failed to upload video file.");
+      const msg = err.message || "Failed to upload video file.";
+      setSourceVideoError(msg);
+      toast.error(msg);
     } finally {
       setIsUploadingVideo(false);
       if (videoFileInputRef.current) videoFileInputRef.current.value = "";
@@ -514,6 +522,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     setIsGenerating(true);
     setGenerationStage("preparing");
     setGeneratedResult(null);
+    toast.info("Starting video generation in background...");
 
     // 1. Create project in projectStore with processing status
     projectStore.createProject({
@@ -595,6 +604,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
 
             if (!updatedPrj) {
               setGenerationError("Video was rendered, but could not be saved to your account. Please check your database connection.");
+              toast.error("Could not save project to account.");
               return;
             }
 
@@ -613,6 +623,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
             }
 
             setGeneratedResult(resultData);
+            toast.success(`Video "${cleanTitle}" generated successfully!`);
 
             // Switch editor preview to the generated MP4
             if (videoRef.current) {
@@ -625,6 +636,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
             setIsGenerating(false);
             const errMsg = status.error || "Generation pipeline encountered an error.";
             setGenerationError(errMsg);
+            toast.error(errMsg);
             projectStore.updateProject(jobId, {
               status: "failed",
               error: errMsg,
@@ -638,6 +650,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
       setIsGenerating(false);
       const errMsg = err.message || "Failed to start generation. Make sure the backend server is running.";
       setGenerationError(errMsg);
+      toast.error(errMsg);
       projectStore.updateProject(jobId, {
         status: "failed",
         error: errMsg,
@@ -733,7 +746,15 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
             disabled={isGenerating}
             title="Start real video generation"
           >
-            <Sparkles size={15} /> Generate Video
+            {isGenerating ? (
+              <>
+                <RefreshCw size={15} className="animate-spin" /> Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles size={15} /> Generate Video
+              </>
+            )}
           </button>
         </div>
       </header>
