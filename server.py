@@ -949,8 +949,16 @@ async def cleanup_user_account(request: web.Request) -> web.Response:
     })
 
 
+async def health_check(request: web.Request) -> web.Response:
+    """Unauthenticated liveness probe. Returns HTTP 200 with minimal JSON."""
+    return web.json_response({"status": "ok"})
+
+
 def make_app() -> web.Application:
     app = web.Application(middlewares=[cors_and_security_middleware])
+
+    # Health probe (no authentication required)
+    app.router.add_get("/health", health_check)
 
     # API routes
     app.router.add_get("/api/voices", get_voices)
@@ -981,6 +989,11 @@ def make_app() -> web.Application:
 
 if __name__ == "__main__":
     app = make_app()
+    # Bind to 0.0.0.0 so the container exposes the port on all interfaces.
+    # Read the PORT variable supplied by Render (or any PaaS); fall back to
+    # 8000 so local development continues to work exactly as before.
+    host = "0.0.0.0"
+    port = int(os.getenv("PORT", "8000"))
     print("=== Faceless Art Studio API Server ===")
-    print("Running on http://127.0.0.1:8000")
-    web.run_app(app, host="127.0.0.1", port=8000)
+    print(f"Running on http://{host}:{port}")
+    web.run_app(app, host=host, port=port)

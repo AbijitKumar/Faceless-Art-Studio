@@ -23,6 +23,10 @@ input/*
 !output/subtitles/.gitkeep
 !output/videos/.gitkeep
 !input/.gitkeep
+!input/uploads/.gitkeep
+
+# Uploaded files (runtime, never commit)
+input/uploads/*
 
 # Node modules
 frontend/node_modules/
