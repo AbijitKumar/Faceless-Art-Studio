@@ -1,15 +1,50 @@
-MIT License
+Copyright (c) 2026 S. Abijit Kumar. All rights reserved.
 
-Copyright (c) 2026
+Faceless Art Studio — Proprietary Software License
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files, to deal in the Software
-without restriction, including without limitation the rights to use, copy,
-modify, merge, publish, distribute, sublicense, and/or sell copies of the
-Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+1. OWNERSHIP
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The Faceless Art Studio source code, software, documentation, design, assets, and other original materials contained in this repository are the property of S. Abijit Kumar, except for third-party components and materials that are subject to their own respective licenses.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+2. PERMITTED ACCESS
+
+This repository may be publicly viewed and inspected for personal, educational, research, and reference purposes.
+
+Viewing, reading, or studying the source code does not grant any ownership rights or a license to use the software.
+
+3. RESTRICTIONS
+
+Without prior written permission from S. Abijit Kumar, you may NOT:
+
+* Copy or reproduce the source code or substantial portions of it for reuse.
+* Modify, adapt, translate, or create derivative works based on the software.
+* Redistribute, publish, sublicense, or sell the software or substantial portions of its source code.
+* Use the software or its source code in another application, product, service, or project.
+* Use the software or its source code for commercial purposes.
+* Repackage or redistribute the software under another name or license.
+* Remove or alter copyright, attribution, or proprietary notices.
+* Present the software or substantial portions of its source code as your own work.
+
+4. PERMISSION
+
+Any use beyond the permitted access described above requires prior written permission from the copyright holder.
+
+Permission may be granted on a case-by-case basis and may include additional conditions.
+
+5. THIRD-PARTY COMPONENTS
+
+This license applies only to original materials owned by S. Abijit Kumar.
+
+Third-party libraries, frameworks, dependencies, models, fonts, media, and other materials included in or used by the project remain subject to their respective licenses and terms. Nothing in this license is intended to override those licenses.
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+
+7. COPYRIGHT
+
+All rights not expressly granted by this license are reserved by S. Abijit Kumar.
+
+For licensing or permission requests, please contact the copyright holder through the contact information provided in the repository.
