@@ -25,7 +25,9 @@ import {
   Volume2,
   X,
   AlertCircle,
+  Plus,
 } from "lucide-react";
+import logoSrc from "./assets/logo.png";
 import {
   CaptionSettings,
   fetchInputFiles,
@@ -38,7 +40,9 @@ import {
   VideoSettings,
   Voice,
 } from "./editorApi";
+import { uploadMediaAsset } from "./mediaApi";
 import { projectStore } from "./projectStore";
+import { createNotification } from "./notificationService";
 import { settingsStore } from "./settingsStore";
 import { TemplateConfig } from "./templates";
 import { useAuth } from "./auth/useAuth";
@@ -46,7 +50,7 @@ import { AuthModal } from "./auth/AuthModal";
 
 export interface EditorPageProps {
   onBack: () => void;
-  onNavigateProjects: () => void;
+  onNavigateProjects: (targetProjectId?: string) => void;
   initialTemplate?: TemplateConfig | null;
   initialVideo?: InputFile | null;
 }
@@ -88,8 +92,12 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     return "My Faceless Video";
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const { isAuthenticated, session } = useAuth();
+  const { isAuthenticated, session, user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // ── Video File Upload State ──────────────────────────────────────────────────
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Script State (Primary First Screen) ─────────────────────────────────────
   const [scriptText, setScriptText] = useState(() => {
@@ -332,6 +340,41 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleVideoUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      if (videoFileInputRef.current) videoFileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploadingVideo(true);
+    setSourceVideoError(null);
+    try {
+      const res = await uploadMediaAsset(file, session?.access_token);
+      const newVideo: InputFile = {
+        name: res.name || file.name,
+        path: res.path,
+        relPath: res.relPath,
+        url: res.url,
+        size: res.size || file.size,
+      };
+      setAvailableVideos((prev) => [newVideo, ...prev.filter((v) => v.name !== newVideo.name)]);
+      setSelectedVideo(newVideo);
+      if (videoRef.current) {
+        videoRef.current.src = newVideo.url;
+        videoRef.current.load();
+      }
+    } catch (err: any) {
+      setSourceVideoError(err.message || "Failed to upload video file.");
+    } finally {
+      setIsUploadingVideo(false);
+      if (videoFileInputRef.current) videoFileInputRef.current.value = "";
+    }
+  };
+
   // ── Sync Alignment with Caption Position ────────────────────────────────────
   useEffect(() => {
     if (captionPosition === "top") setAlignment(8);
@@ -540,10 +583,8 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               duration: finalDuration,
             };
 
-            setGeneratedResult(resultData);
-
-            // Update projectStore with completed state
-            projectStore.updateProject(jobId, {
+            // Update projectStore with completed state in Supabase
+            const updatedPrj = await projectStore.updateProject(jobId, {
               status: "completed",
               videoPath: status.result.video_url,
               voiceoverPath: status.result.voiceover_url || null,
@@ -551,6 +592,27 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               sourceVideo: status.source_video || status.result.source_video || sourceVideoName,
               duration: finalDuration,
             });
+
+            if (!updatedPrj) {
+              setGenerationError("Video was rendered, but could not be saved to your account. Please check your database connection.");
+              return;
+            }
+
+            // Post persistent Supabase notification for the authenticated user
+            if (user?.id) {
+              try {
+                await createNotification(user.id, {
+                  title: "Video Created Successfully",
+                  message: `Your video "${cleanTitle}" has been generated and saved to My Projects.`,
+                  projectId: jobId,
+                  type: "video_created",
+                });
+              } catch (nErr) {
+                console.warn("Could not post video notification:", nErr);
+              }
+            }
+
+            setGeneratedResult(resultData);
 
             // Switch editor preview to the generated MP4
             if (videoRef.current) {
@@ -602,6 +664,14 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
         onChange={handleTxtBrowseChange}
         style={{ display: "none" }}
       />
+      {/* ── Hidden File Input for Video upload ─────────────────────────────────── */}
+      <input
+        ref={videoFileInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm"
+        onChange={handleVideoUploadChange}
+        style={{ display: "none" }}
+      />
 
       {/* ── 1. Editor Top Bar ─────────────────────────────────────────────────── */}
       <header className="editor-topbar">
@@ -610,9 +680,11 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
             <ArrowLeft size={16} />
           </button>
           <div className="editor-brand">
-            <div className="brand-mark">
-              <Film size={17} />
-            </div>
+            <img
+              src={logoSrc}
+              alt="Faceless Art Studio"
+              style={{ width: 28, height: 28, objectFit: "contain", display: "block" }}
+            />
             <div>
               <b>FACELESS</b>
               <span>ART STUDIO</span>
@@ -745,14 +817,24 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
                 <Video size={16} className="text-blue" />
                 <strong>2. Background Video</strong>
               </div>
-              <button
-                className="roll-random-btn"
-                onClick={handleRollRandomVideo}
-                disabled={isLoadingSource || availableVideos.length === 0}
-                title="Roll another random video from input/"
-              >
-                <Shuffle size={12} /> Roll Another
-              </button>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button
+                  className="editor-add-video-btn"
+                  onClick={() => videoFileInputRef.current?.click()}
+                  disabled={isUploadingVideo}
+                  title="Upload a custom video file"
+                >
+                  <Plus size={13} /> {isUploadingVideo ? "Importing..." : "Add Video"}
+                </button>
+                <button
+                  className="roll-random-btn"
+                  onClick={handleRollRandomVideo}
+                  disabled={isLoadingSource || availableVideos.length === 0}
+                  title="Roll another random video from input/"
+                >
+                  <Shuffle size={12} /> Roll Another
+                </button>
+              </div>
             </div>
 
             <div className="source-video-card">
@@ -967,6 +1049,13 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
                 <div className="track-label">
                   <Video size={12} />
                   <span>VIDEO</span>
+                  <button
+                    className="track-add-btn"
+                    onClick={() => videoFileInputRef.current?.click()}
+                    title="Add or import custom video"
+                  >
+                    <Plus size={11} /> Add
+                  </button>
                 </div>
                 <div className="track-content">
                   <div className="track-block video-block">
@@ -1267,8 +1356,9 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               <button
                 className="secondary-btn"
                 onClick={() => {
+                  const targetId = generatedResult.job_id;
                   setGeneratedResult(null);
-                  onNavigateProjects();
+                  onNavigateProjects(targetId);
                 }}
               >
                 <FolderKanban size={15} /> View in My Projects

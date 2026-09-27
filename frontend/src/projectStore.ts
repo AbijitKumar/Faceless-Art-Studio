@@ -1,48 +1,144 @@
 import { useEffect, useState } from "react";
-export type ProjectStatus = "draft" | "processing" | "completed" | "failed";
+import {
+  Project,
+  ProjectStatus,
+  fetchUserProjects,
+  createProjectRecord,
+  updateProjectRecord,
+  deleteProjectRecord,
+  duplicateProjectRecord,
+} from "./projectService";
+import { supabase, isSupabaseConfigured } from "./lib/supabase";
 
-export interface Project {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  status: ProjectStatus;
-  duration?: string | null;
-  videoPath?: string | null;
-  voiceoverPath?: string | null;
-  subtitlesPath?: string | null;
-  topic?: string | null;
-  resolution?: string | null;
-  sourceVideo?: string | null;
-  error?: string | null;
-}
-
-const STORAGE_KEY = "faceless_art_studio_projects";
+export type { Project, ProjectStatus };
 
 class ProjectStore {
+  private currentUserId: string | null = null;
+  private projects: Project[] = [];
+  private isLoading: boolean = false;
+  private error: string | null = null;
   private listeners: Set<() => void> = new Set();
+  private realtimeChannel: any = null;
+
+  getCurrentUserId(): string | null {
+    return this.currentUserId;
+  }
 
   getProjects(): Project[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (!data) return [];
-      const parsed = JSON.parse(data);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    return this.projects;
   }
 
   getProject(id: string): Project | null {
-    const projects = this.getProjects();
-    return projects.find((p) => p.id === id) || null;
+    return this.projects.find((p) => p.id === id) || null;
   }
 
-  createProject(data: Partial<Project> & { title?: string }): Project {
-    const projects = this.getProjects();
+  getIsLoading(): boolean {
+    return this.isLoading;
+  }
+
+  getError(): string | null {
+    return this.error;
+  }
+
+  /**
+   * Called on auth change (login, logout, switch account).
+   * Completely clears previous user's projects to prevent data leakage.
+   */
+  async setSessionUser(userId: string | null): Promise<void> {
+    if (this.currentUserId === userId && this.projects.length > 0) {
+      return;
+    }
+
+    // Teardown previous realtime subscription
+    if (this.realtimeChannel) {
+      try {
+        supabase.removeChannel(this.realtimeChannel);
+      } catch {}
+      this.realtimeChannel = null;
+    }
+
+    this.currentUserId = userId;
+    // Immediately clear state to prevent flashing another user's projects
+    this.projects = [];
+    this.error = null;
+
+    if (!userId || !isSupabaseConfigured) {
+      this.isLoading = false;
+      this.notify();
+      return;
+    }
+
+    this.isLoading = true;
+    this.notify();
+
+    try {
+      const userProjects = await fetchUserProjects(userId);
+      // Double check that user hasn't changed while request was in-flight
+      if (this.currentUserId === userId) {
+        this.projects = userProjects;
+        this.isLoading = false;
+        this.notify();
+      }
+    } catch (err: any) {
+      if (this.currentUserId === userId) {
+        this.error = err.message || "Failed to load projects";
+        this.isLoading = false;
+        this.notify();
+      }
+    }
+
+    // Setup realtime subscription for this specific user
+    try {
+      this.realtimeChannel = supabase
+        .channel(`public:projects:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "projects",
+            filter: `user_id=eq.${userId}`,
+          },
+          async () => {
+            if (this.currentUserId === userId) {
+              const fresh = await fetchUserProjects(userId);
+              if (this.currentUserId === userId) {
+                this.projects = fresh;
+                this.notify();
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("Failed to subscribe to realtime project updates:", e);
+    }
+  }
+
+  async reloadProjects(): Promise<void> {
+    if (!this.currentUserId) return;
+    try {
+      const fresh = await fetchUserProjects(this.currentUserId);
+      this.projects = fresh;
+      this.notify();
+    } catch (err: any) {
+      console.warn("reloadProjects error:", err);
+    }
+  }
+
+  async createProject(data: Partial<Project> & { title?: string }): Promise<Project | null> {
+    const userId = this.currentUserId;
+    if (!userId) {
+      console.warn("Cannot create project: user is not authenticated.");
+      return null;
+    }
+
+    // Optimistic item
+    const tempId = data.id || `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = new Date().toISOString();
-    const newProject: Project = {
-      id: data.id || `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    const optimistic: Project = {
+      id: tempId,
+      userId,
       title: data.title?.trim() || "Untitled Project",
       createdAt: data.createdAt || now,
       updatedAt: now,
@@ -51,82 +147,100 @@ class ProjectStore {
       videoPath: data.videoPath ?? null,
       voiceoverPath: data.voiceoverPath ?? null,
       subtitlesPath: data.subtitlesPath ?? null,
+      thumbnailPath: data.thumbnailPath ?? null,
       topic: data.topic ?? null,
       resolution: data.resolution ?? "1080p",
+      aspectRatio: data.aspectRatio ?? "9:16",
       sourceVideo: data.sourceVideo ?? null,
       error: data.error ?? null,
     };
 
-
-    const updated = [newProject, ...projects];
-    this.save(updated);
+    // Prepend optimistically
+    this.projects = [optimistic, ...this.projects];
     this.notify();
-    return newProject;
+
+    // Persist to Supabase
+    const saved = await createProjectRecord(userId, { ...data, id: tempId });
+    if (saved) {
+      this.projects = this.projects.map((p) => (p.id === tempId ? saved : p));
+      this.notify();
+      return saved;
+    } else {
+      // Revert if persistence failed
+      this.projects = this.projects.filter((p) => p.id !== tempId);
+      this.notify();
+      return null;
+    }
   }
 
-  updateProject(id: string, updates: Partial<Project>): Project | null {
-    const projects = this.getProjects();
-    const idx = projects.findIndex((p) => p.id === id);
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project | null> {
+    const userId = this.currentUserId;
+    if (!userId) return null;
+
+    const idx = this.projects.findIndex((p) => p.id === id);
     if (idx === -1) return null;
 
-    const now = new Date().toISOString();
-    const updatedProject: Project = {
-      ...projects[idx],
+    const previous = this.projects[idx];
+    const optimistic: Project = {
+      ...previous,
       ...updates,
-      updatedAt: now,
+      updatedAt: new Date().toISOString(),
     };
 
-    projects[idx] = updatedProject;
-    this.save(projects);
+    this.projects[idx] = optimistic;
     this.notify();
-    return updatedProject;
+
+    // Persist to Supabase
+    const saved = await updateProjectRecord(userId, id, updates);
+    if (saved) {
+      this.projects = this.projects.map((p) => (p.id === id ? saved : p));
+      this.notify();
+      return saved;
+    } else {
+      // Revert if failed
+      this.projects[idx] = previous;
+      this.notify();
+      return null;
+    }
   }
 
-  deleteProject(id: string): boolean {
-    const projects = this.getProjects();
-    const filtered = projects.filter((p) => p.id !== id);
-    if (filtered.length === projects.length) return false;
+  async deleteProject(id: string): Promise<boolean> {
+    const userId = this.currentUserId;
+    if (!userId) return false;
 
-    this.save(filtered);
+    const existing = this.projects.find((p) => p.id === id);
+    if (!existing) return false;
+
+    // Optimistically remove
+    this.projects = this.projects.filter((p) => p.id !== id);
     this.notify();
+
+    const ok = await deleteProjectRecord(userId, id);
+    if (!ok) {
+      // Revert
+      this.projects = [existing, ...this.projects];
+      this.notify();
+      return false;
+    }
     return true;
   }
 
-  duplicateProject(id: string): Project | null {
-    const project = this.getProject(id);
-    if (!project) return null;
+  async duplicateProject(id: string): Promise<Project | null> {
+    const userId = this.currentUserId;
+    if (!userId) return null;
 
-    const now = new Date().toISOString();
-    const duplicated: Project = {
-      ...project,
-      id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      title: `${project.title} (Copy)`,
-      status: "draft",
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const projects = [duplicated, ...this.getProjects()];
-    this.save(projects);
-    this.notify();
-    return duplicated;
+    const saved = await duplicateProjectRecord(userId, id);
+    if (saved) {
+      this.projects = [saved, ...this.projects];
+      this.notify();
+      return saved;
+    }
+    return null;
   }
 
   clearAll(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      this.notify();
-    } catch (e) {
-      console.error("Failed to clear projects from localStorage:", e);
-    }
-  }
-
-  private save(projects: Project[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-    } catch (e) {
-      console.error("Failed to save projects to localStorage:", e);
-    }
+    this.projects = [];
+    this.notify();
   }
 
   subscribe(listener: () => void): () => void {
@@ -152,23 +266,35 @@ class ProjectStore {
 
 export const projectStore = new ProjectStore();
 
-export function useProjects(): Project[] {
+export function useProjects(): {
+  projects: Project[];
+  isLoading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
+} & Project[] {
   const [projects, setProjects] = useState<Project[]>(() => projectStore.getProjects());
+  const [isLoading, setIsLoading] = useState<boolean>(() => projectStore.getIsLoading());
+  const [error, setError] = useState<string | null>(() => projectStore.getError());
 
   useEffect(() => {
-    const update = () => setProjects(projectStore.getProjects());
-    const unsub = projectStore.subscribe(update);
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) update();
+    const update = () => {
+      setProjects([...projectStore.getProjects()]);
+      setIsLoading(projectStore.getIsLoading());
+      setError(projectStore.getError());
     };
-    window.addEventListener("storage", handleStorage);
+    const unsub = projectStore.subscribe(update);
     window.addEventListener("project_store_updated", update);
     return () => {
       unsub();
-      window.removeEventListener("storage", handleStorage);
       window.removeEventListener("project_store_updated", update);
     };
   }, []);
 
-  return projects;
+  // Return an array with additional properties attached for backwards compatibility!
+  const result: any = projects;
+  result.projects = projects;
+  result.isLoading = isLoading;
+  result.error = error;
+  result.reload = () => projectStore.reloadProjects();
+  return result;
 }

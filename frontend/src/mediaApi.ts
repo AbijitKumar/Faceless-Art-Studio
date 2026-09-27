@@ -42,8 +42,12 @@ export interface SubtitleCue {
 /**
  * Fetch all media assets and summary from backend
  */
-export async function fetchMediaAssets(): Promise<MediaResponse> {
-  const res = await fetch("/api/media");
+export async function fetchMediaAssets(token?: string): Promise<MediaResponse> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch("/api/media", { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch media assets: ${res.status} ${res.statusText}`);
   }
@@ -53,12 +57,18 @@ export async function fetchMediaAssets(): Promise<MediaResponse> {
 /**
  * Upload a media file to the backend
  */
-export async function uploadMediaAsset(file: File): Promise<any> {
+export async function uploadMediaAsset(file: File, token?: string): Promise<any> {
   const formData = new FormData();
   formData.append("file", file);
 
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch("/api/upload", {
     method: "POST",
+    headers,
     body: formData,
   });
 

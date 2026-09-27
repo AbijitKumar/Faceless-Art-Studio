@@ -47,6 +47,7 @@ import {
   uploadMediaAsset,
 } from "./mediaApi";
 import { useProjects } from "./projectStore";
+import { useAuth } from "./auth/AuthContext";
 
 export interface MediaLibraryPageProps {
   onUseInEditor: (asset: MediaAsset) => void;
@@ -81,7 +82,7 @@ export function MediaLibraryPage({
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [activeFilter, setActiveFilter] = useState<FilterType>("video");
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
@@ -120,6 +121,8 @@ export function MediaLibraryPage({
   // Toast / Copy Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const { session } = useAuth();
+
   // ── Load Media Assets ───────────────────────────────────────────────────────
   const loadMedia = async (showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -127,7 +130,7 @@ export function MediaLibraryPage({
     setError(null);
 
     try {
-      const data = await fetchMediaAssets();
+      const data = await fetchMediaAssets(session?.access_token);
       setAssets(data.assets);
       setSummary(data.summary);
     } catch (err: any) {
@@ -141,7 +144,7 @@ export function MediaLibraryPage({
 
   useEffect(() => {
     loadMedia();
-  }, []);
+  }, [session?.access_token]);
 
   // ── Persist View Mode ───────────────────────────────────────────────────────
   const handleViewModeChange = (mode: ViewMode) => {
@@ -330,7 +333,7 @@ export function MediaLibraryPage({
     setIsUploading(true);
 
     try {
-      const res = await uploadMediaAsset(file);
+      const res = await uploadMediaAsset(file, session?.access_token);
       setUploadSuccessName(res.name || file.name);
       showToast(`Uploaded ${res.name || file.name} successfully!`);
       // Reload media library

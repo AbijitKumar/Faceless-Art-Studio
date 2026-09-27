@@ -25,6 +25,8 @@ import { ResetPasswordPage } from "./auth/ResetPasswordPage";
 import { LogOut } from "lucide-react";
 
 
+import { AppHeader } from "./AppHeader";
+
 type Page =
   | "dashboard"
   | "projects"
@@ -46,19 +48,6 @@ const nav: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "media", label: "Media Library", icon: Image },
 ];
 
-const SEARCH_INDEX: { label: string; description: string; page: Page }[] = [
-  { label: "Dashboard", description: "Your studio overview and stats", page: "dashboard" },
-  { label: "My Projects", description: "View all your created projects", page: "projects" },
-  { label: "Create Video", description: "Start a new video from a script", page: "editor" },
-  { label: "Templates", description: "Browse available video templates", page: "templates" },
-  { label: "Media Library", description: "Manage your uploaded media", page: "media" },
-  { label: "Settings", description: "Configure your workspace preferences", page: "settings" },
-  { label: "Help", description: "Help center and documentation", page: "help" },
-  { label: "Upload Media", description: "Add source media to your library", page: "media" },
-  { label: "Quick Actions", description: "Jump straight into your workflow", page: "dashboard" },
-  { label: "Recent Projects", description: "Your latest creations", page: "projects" },
-];
-
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -73,251 +62,10 @@ function statusLabel(s: ProjectStatus) {
   }
 }
 
-// ── Shared close-on-outside-click + Escape hook ───────────────────────────────
-function useCloseOnOutsideAndEsc(
-  ref: React.RefObject<HTMLElement | null>,
-  open: boolean,
-  onClose: () => void,
-) {
-  useEffect(() => {
-    if (!open) return;
-    function handle(e: MouseEvent | KeyboardEvent) {
-      if (e instanceof KeyboardEvent) {
-        if (e.key === "Escape") onClose();
-        return;
-      }
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", handle);
-    document.addEventListener("keydown", handle);
-    return () => {
-      document.removeEventListener("mousedown", handle);
-      document.removeEventListener("keydown", handle);
-    };
-  }, [open, ref, onClose]);
-}
-
-// ── SearchDropdown ────────────────────────────────────────────────────────────
-function SearchDropdown({
-  query,
-  onNavigate,
-  onClose,
-}: {
-  query: string;
-  onNavigate: (p: Page) => void;
-  onClose: () => void;
-}) {
-  const q = query.toLowerCase();
-  const pageResults = SEARCH_INDEX.filter(
-    (item) =>
-      item.label.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q),
-  );
-
-  const projectResults = projectStore.getProjects().filter(
-    (p) => p.title.toLowerCase().includes(q) || (p.topic && p.topic.toLowerCase().includes(q))
-  );
-
-  const total = pageResults.length + projectResults.length;
-
-  if (total === 0) {
-    return (
-      <div className="search-dropdown" role="listbox" aria-label="Search results">
-        <div className="search-empty">
-          <Search size={18} />
-          <strong>No Results Found</strong>
-          <span>Try a different search term.</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="search-dropdown" role="listbox" aria-label="Search results">
-      {pageResults.map((item) => {
-        const Icon = nav.find((n) => n.id === item.page)?.icon ?? LayoutDashboard;
-        return (
-          <button
-            key={`page-${item.label}`}
-            className="search-result"
-            role="option"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onNavigate(item.page);
-              onClose();
-            }}
-          >
-            <span className="search-result-icon"><Icon size={15} /></span>
-            <span className="search-result-text">
-              <b>{item.label}</b>
-              <small>{item.description}</small>
-            </span>
-          </button>
-        );
-      })}
-      {projectResults.map((p) => (
-        <button
-          key={`proj-${p.id}`}
-          className="search-result"
-          role="option"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onNavigate("projects");
-            onClose();
-          }}
-        >
-          <span className="search-result-icon"><FileVideo size={15} /></span>
-          <span className="search-result-text">
-            <b>{p.title}</b>
-            <small>Project · {statusLabel(p.status)} {p.duration ? `· ${p.duration}` : ""}</small>
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── NotifDropdown ─────────────────────────────────────────────────────────────
-function NotifDropdown() {
-  return (
-    <div className="notif-dropdown" role="dialog" aria-label="Notifications">
-      <div className="notif-head"><strong>Notifications</strong></div>
-      <div className="notif-empty">
-        <Bell size={18} />
-        <b>No new notifications</b>
-        <span>You&apos;re all caught up.</span>
-      </div>
-    </div>
-  );
-}
-
-// ── UserMenuDropdown ────────────────────────────────────────────────────────
-function UserMenuDropdown({
-  user,
-  profile,
-  onNavigate,
-  onSignOut,
-  onClose,
-}: {
-  user: any;
-  profile: any;
-  onNavigate: (p: Page) => void;
-  onSignOut: () => void;
-  onClose: () => void;
-}) {
-  const name =
-    profile?.display_name ||
-    user?.user_metadata?.display_name ||
-    user?.email?.split("@")[0] ||
-    "Creator";
-  const email = user?.email || "";
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        right: 0,
-        top: "100%",
-        marginTop: 8,
-        width: 230,
-        backgroundColor: "#181B20",
-        border: "1px solid #2E3644",
-        borderRadius: 12,
-        boxShadow: "0 12px 32px rgba(0, 0, 0, 0.6)",
-        padding: "8px 0",
-        zIndex: 1000,
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      <div style={{ padding: "10px 16px 12px", borderBottom: "1px solid #282E38" }}>
-        <div style={{ fontWeight: 700, color: "#F8FAFC", fontSize: 13.5 }}>{name}</div>
-        <div
-          style={{
-            color: "#94A3B8",
-            fontSize: 12,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {email}
-        </div>
-      </div>
-      <div style={{ padding: "4px 0" }}>
-        <button
-          onClick={() => {
-            onNavigate("settings");
-            onClose();
-          }}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 16px",
-            background: "none",
-            border: "none",
-            color: "#E2E8F0",
-            fontSize: 13,
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <Settings size={15} color="#94A3B8" /> Settings
-        </button>
-        <button
-          onClick={() => {
-            onNavigate("help");
-            onClose();
-          }}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 16px",
-            background: "none",
-            border: "none",
-            color: "#E2E8F0",
-            fontSize: 13,
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <HelpCircle size={15} color="#94A3B8" /> Help & Support
-        </button>
-      </div>
-      <div style={{ borderTop: "1px solid #282E38", paddingTop: 4 }}>
-        <button
-          onClick={() => {
-            onSignOut();
-            onClose();
-          }}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 16px",
-            background: "none",
-            border: "none",
-            color: "#FCA5A5",
-            fontSize: 13,
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <LogOut size={15} color="#EF4444" /> Sign Out
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── AppContent ───────────────────────────────────────────────────────────────
 function AppContent() {
   const settings = useSettings();
-  const { user, profile, isAuthenticated, signOut, isPasswordRecovery } = useAuth();
+  const { user, profile, isAuthenticated, isPasswordRecovery } = useAuth();
 
   const [page, setPage] = useState<Page>(() => {
     const landing = settingsStore.getSettings().defaultLandingPage;
@@ -330,17 +78,12 @@ function AppContent() {
   const [selectedSourceVideo, setSelectedSourceVideo] = useState<InputFile | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
-  const [now, setNow] = useState(Date.now());
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchWrapRef = useRef<HTMLDivElement>(null);
-
-  const [notifOpen, setNotifOpen] = useState(false);
-  const notifWrapRef = useRef<HTMLDivElement>(null);
-
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  // Sync session user with projectStore (clears state on logout, loads user projects on login)
+  useEffect(() => {
+    projectStore.setSessionUser(user?.id ?? null);
+  }, [user?.id]);
 
   // Watch for password recovery session
   useEffect(() => {
@@ -354,21 +97,6 @@ function AppContent() {
     settingsStore.applyTheme(settings.theme);
   }, [settings.theme]);
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const _time = useMemo(() => greeting(), [now]); void _time;
-
-  const closeSearch = () => { setSearchOpen(false); setSearchQuery(""); };
-  const closeNotif = () => setNotifOpen(false);
-  const closeUserMenu = () => setUserMenuOpen(false);
-
-  useCloseOnOutsideAndEsc(searchWrapRef, searchOpen, closeSearch);
-  useCloseOnOutsideAndEsc(notifWrapRef, notifOpen, closeNotif);
-  useCloseOnOutsideAndEsc(userMenuRef, userMenuOpen, closeUserMenu);
-
   const userDisplayName = isAuthenticated
     ? profile?.display_name || user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Creator"
     : settings.displayName || "Guest Studio";
@@ -381,7 +109,6 @@ function AppContent() {
 
   const go = (next: Page) => {
     setPage(next);
-    closeSearch();
   };
 
   if (page === "login") {
@@ -397,12 +124,10 @@ function AppContent() {
     return <ResetPasswordPage onNavigate={(p) => go(p as Page)} />;
   }
 
-
   const handleUseTemplate = (template: TemplateConfig) => {
     setSelectedTemplate(template);
     setSelectedSourceVideo(null);
     setPage("editor");
-    closeSearch();
   };
 
   const handleUseMediaInEditor = (asset: MediaAsset) => {
@@ -415,19 +140,20 @@ function AppContent() {
     });
     setSelectedTemplate(null);
     setPage("editor");
-    closeSearch();
   };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchQuery(val);
-    setSearchOpen(val.trim().length > 0);
-  };
-
-  const hasUnread = false;
 
   return (
     <div className="app">
+      {/* ── Unified Shared Header (Logo + Brand | Search | Notifications + User) ── */}
+      <AppHeader
+        activePage={page}
+        onNavigate={(p, targetId) => {
+          if (targetId) setSelectedProjectId(targetId);
+          go(p);
+        }}
+        onToggleSidebar={() => setSidebarExpanded((v) => !v)}
+      />
+
       <aside ref={sidebarRef} className={`sidebar ${sidebarExpanded ? "expanded" : ""}`}>
         <div className="brand">
           <button
@@ -438,18 +164,20 @@ function AppContent() {
           >
             <Menu size={18} />
           </button>
-          <div className="brand-mark" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
-            <img
-              src={logoSrc}
-              alt="Faceless Art Studio"
-              style={{ width: 28, height: 28, objectFit: "contain", display: "block" }}
-            />
-          </div>
           {sidebarExpanded && (
-            <div className="brand-text">
-              <b>Faceless Art</b>
-              <span>Studio</span>
-            </div>
+            <>
+              <div className="brand-mark" onClick={() => setSidebarExpanded((v) => !v)} style={{ cursor: "pointer" }}>
+                <img
+                  src={logoSrc}
+                  alt="Faceless Art Studio"
+                  style={{ width: 28, height: 28, objectFit: "contain", display: "block" }}
+                />
+              </div>
+              <div className="brand-text">
+                <b>Faceless Art</b>
+                <span>Studio</span>
+              </div>
+            </>
           )}
         </div>
         <section className="nav-section">
@@ -507,126 +235,16 @@ function AppContent() {
       </aside>
 
       <div className="main">
-        <header className="topbar">
-          {/* ── Search ── */}
-          <div className="search-wrap" ref={searchWrapRef}>
-            <label className="search">
-              <Search size={16} />
-              <input
-                placeholder="Search projects..."
-                aria-label="Search projects"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onFocus={() => { if (searchQuery.trim().length > 0) setSearchOpen(true); }}
-                autoComplete="off"
-              />
-              <kbd>⌘ K</kbd>
-            </label>
-            {searchOpen && (
-              <SearchDropdown query={searchQuery} onNavigate={go} onClose={closeSearch} />
-            )}
-          </div>
-
-          {/* ── Notifications ── */}
-          <div className="notif-wrap" ref={notifWrapRef}>
-            <button className="icon" aria-label="Notifications"
-              onClick={() => setNotifOpen((v) => !v)}>
-              <Bell size={18} />
-              {hasUnread && <i />}
-            </button>
-            {notifOpen && <NotifDropdown />}
-          </div>
-
-          {/* ── User Session / Sign In ── */}
-          {isAuthenticated ? (
-            <div style={{ position: "relative" }} ref={userMenuRef}>
-              <button
-                className="topbar-user-btn"
-                onClick={() => setUserMenuOpen((v) => !v)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "#181B20",
-                  border: "1px solid #282E38",
-                  borderRadius: 24,
-                  padding: "4px 10px 4px 5px",
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: "50%",
-                    background: userAvatarColor,
-                    color: "#FFFFFF",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {userInitials}
-                </div>
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#F8FAFC",
-                    maxWidth: 110,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {userDisplayName}
-                </span>
-                <ChevronDown size={14} color="#94A3B8" />
-              </button>
-              {userMenuOpen && (
-                <UserMenuDropdown
-                  user={user}
-                  profile={profile}
-                  onNavigate={go}
-                  onSignOut={signOut}
-                  onClose={() => setUserMenuOpen(false)}
-                />
-              )}
-            </div>
-          ) : (
-            <button
-              className="primary"
-              onClick={() => go("login")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                borderRadius: 8,
-                boxShadow: "0 4px 12px rgba(30, 140, 250, 0.3)",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Sparkles size={14} /> Sign In
-            </button>
-          )}
-        </header>
-
         {page === "dashboard"
           ? <Dashboard onNavigate={go} />
           : page === "projects"
-            ? <ProjectsPage onNavigate={go} />
+            ? <ProjectsPage onNavigate={go} initialSelectedProjectId={selectedProjectId} />
             : page === "templates"
               ? <TemplatesPage onUseTemplate={handleUseTemplate} onNavigateEditor={() => go("editor")} />
               : page === "media"
                 ? <MediaLibraryPage onUseInEditor={handleUseMediaInEditor} onNavigateEditor={() => go("editor")} onNavigateProjects={() => go("projects")} />
                 : page === "editor"
-                  ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={() => go("projects")} initialTemplate={selectedTemplate} initialVideo={selectedSourceVideo} />
+                  ? <EditorPage onBack={() => go("dashboard")} onNavigateProjects={(targetId) => { if (targetId) setSelectedProjectId(targetId); go("projects"); }} initialTemplate={selectedTemplate} initialVideo={selectedSourceVideo} />
                   : page === "settings"
                     ? <SettingsPage onNavigateHelp={(targetSec) => { if (targetSec) setHelpSection(targetSec); setPage("help"); }} onNavigateAuth={(p) => go(p as Page)} />
                     : page === "help"
@@ -695,7 +313,7 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
           )}
         </article>
         <div className="side">
-          <article className="panel">
+          <article className="panel quick-actions-panel">
             <PanelHead title="Quick Actions" sub="Jump straight into your workflow." />
             <div className="quick">
               <button onClick={() => onNavigate("editor")}>
@@ -712,7 +330,7 @@ function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
               </button>
             </div>
           </article>
-          <article className="panel activity">
+          <article className="panel activity activity-panel">
             <PanelHead title="Recent Activity" sub="Activity from your workspace." />
             {projects.length === 0 ? (
               <div className="activity-empty">
@@ -767,7 +385,14 @@ function Empty({ icon, title, text, action, onClick }: {
 type SortKey = "updated" | "title" | "duration" | "status";
 type FilterStatus = "all" | ProjectStatus;
 
-function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
+function ProjectsPage({
+  onNavigate,
+  initialSelectedProjectId,
+}: {
+  onNavigate: (p: Page) => void;
+  initialSelectedProjectId?: string | null;
+}) {
+  const { isAuthenticated, session } = useAuth();
   const projects = useProjects();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterStatus>("all");
@@ -777,6 +402,16 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Auto-select initial project if passed (e.g., from "View in My Projects" or Notification)
+  useEffect(() => {
+    if (initialSelectedProjectId && projects.length > 0) {
+      const match = projects.find((p) => p.id === initialSelectedProjectId);
+      if (match) {
+        setSelected(match);
+      }
+    }
+  }, [initialSelectedProjectId, projects]);
 
   // Close action menu on outside click
   useEffect(() => {
@@ -833,7 +468,7 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
     setMenuOpen(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const currentSettings = settingsStore.getSettings();
     if (currentSettings.confirmBeforeDelete) {
       const p = projects.find((x) => x.id === id);
@@ -844,11 +479,10 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
         return;
       }
     }
-    projectStore.deleteProject(id);
+    await projectStore.deleteProject(id);
     setMenuOpen(null);
     if (selected?.id === id) setSelected(null);
   };
-
 
   const FILTERS: { key: FilterStatus; label: string }[] = [
     { key: "all", label: "All" },
@@ -857,6 +491,28 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
     { key: "completed", label: "Completed" },
     { key: "failed", label: "Failed" },
   ];
+
+  if (!isAuthenticated) {
+    return (
+      <main className="content">
+        <section className="hero">
+          <div>
+            <small className="eyebrow">MY WORKSPACE</small>
+            <h1>My Projects</h1>
+            <p>Manage and continue working on your videos.</p>
+          </div>
+        </section>
+        <div className="empty" style={{ minHeight: 350 }}>
+          <div className="empty-icon"><FolderKanban /></div>
+          <h3>Sign in to view your projects</h3>
+          <p>Your video projects are securely associated with your account in Supabase.</p>
+          <button className="primary" onClick={() => onNavigate("login")}>
+            <Sparkles size={16} /> Sign In to Studio
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="content">
@@ -913,7 +569,13 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
       )}
 
       {/* ── Grid or empty state ── */}
-      {visible.length === 0 ? (
+      {projectStore.getIsLoading() ? (
+        <div className="empty" style={{ minHeight: 350 }}>
+          <div className="empty-icon"><FolderKanban /></div>
+          <h3>Loading your projects...</h3>
+          <p>Connecting to your personal workspace.</p>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="empty" style={{ minHeight: 350 }}>
           <div className="empty-icon">
             {projects.length === 0 ? <FolderKanban /> : <Search />}
@@ -1044,9 +706,10 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                 {selected.videoPath && selected.status === "completed" && (() => {
                   const filename = selected.videoPath.split("/").pop() || `${selected.id}.mp4`;
                   const safeTitle = (selected.title || "faceless-video").replace(/[\\/*?:"<>|]/g, "_");
+                  const tokenParam = session?.access_token ? `&token=${encodeURIComponent(session.access_token)}` : "";
                   return (
                     <a
-                      href={`/api/download/${filename}?title=${encodeURIComponent(safeTitle)}`}
+                      href={`/api/download/${filename}?title=${encodeURIComponent(safeTitle)}${tokenParam}`}
                       download={`${safeTitle}.mp4`}
                       className="primary"
                       style={{ textDecoration: "none" }}
@@ -1062,7 +725,6 @@ function ProjectsPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
             </div>
           </div>
         </div>
-
       )}
     </main>
   );
