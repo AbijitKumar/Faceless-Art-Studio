@@ -21,6 +21,7 @@ import { ToastProvider, useToast } from "./ToastContext";
 import { AppHeader, Page } from "./AppHeader";
 import { CookieConsentBanner } from "./CookieConsentBanner";
 import { HelpSectionId } from "./HelpPage";
+import { API_BASE } from "./lib/apiBase";
 
 // Code-split heavy routes with React.lazy
 const EditorPage = lazy(() => import("./EditorPage").then((m) => ({ default: m.EditorPage })));
@@ -872,7 +873,7 @@ function ProjectsPage({
                   const tokenParam = session?.access_token ? `&token=${encodeURIComponent(session.access_token)}` : "";
                   return (
                     <a
-                      href={`/api/download/${filename}?title=${encodeURIComponent(safeTitle)}${tokenParam}`}
+                      href={`${API_BASE}/api/download/${filename}?title=${encodeURIComponent(safeTitle)}${tokenParam}`}
                       download={`${safeTitle}.mp4`}
                       className="primary"
                       style={{ textDecoration: "none" }}

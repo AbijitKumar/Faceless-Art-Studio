@@ -49,6 +49,7 @@ import {
 import { useProjects } from "./projectStore";
 import { useAuth } from "./auth/AuthContext";
 import { useToast } from "./ToastContext";
+import { API_BASE } from "./lib/apiBase";
 
 export interface MediaLibraryPageProps {
   onUseInEditor: (asset: MediaAsset) => void;
@@ -195,7 +196,7 @@ export function MediaLibraryPage({
     }
 
     setIsLoadingSubtitle(true);
-    fetchSubtitleContent(previewAsset.url)
+    fetchSubtitleContent(`${API_BASE}${previewAsset.url}`)
       .then((content) => {
         setRawSubtitleText(content);
         const cues = parseSubtitleCues(content, previewAsset.extension);
@@ -221,7 +222,7 @@ export function MediaLibraryPage({
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
       }
-      const audio = new Audio(asset.url);
+      const audio = new Audio(`${API_BASE}${asset.url}`);
       audioPlayerRef.current = audio;
 
       audio.onloadedmetadata = () => {
@@ -641,7 +642,7 @@ export function MediaLibraryPage({
                   {asset.type === "video" ? (
                     <div className="video-thumb-container">
                       <video
-                        src={asset.url}
+                        src={`${API_BASE}${asset.url}`}
                         className="video-thumb-video"
                         preload="metadata"
                         muted
@@ -694,7 +695,7 @@ export function MediaLibraryPage({
                     </div>
                   ) : (
                     <div className="image-thumb-container">
-                      <img src={asset.url} alt={asset.name} className="image-thumb-img" />
+                      <img src={`${API_BASE}${asset.url}`} alt={asset.name} className="image-thumb-img" />
                     </div>
                   )}
 
@@ -782,7 +783,7 @@ export function MediaLibraryPage({
                         )}
 
                         <a
-                          href={`/api/download/${asset.name}?title=${encodeURIComponent(
+                          href={`${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
                             projectTitle || asset.name.replace(/\.[^/.]+$/, "")
                           )}`}
                           download={asset.name}
@@ -906,7 +907,7 @@ export function MediaLibraryPage({
                           <ExternalLink size={13} />
                         </button>
                         <a
-                          href={`/api/download/${asset.name}?title=${encodeURIComponent(
+                          href={`${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
                             projectTitle || asset.name.replace(/\.[^/.]+$/, "")
                           )}`}
                           download={asset.name}
@@ -960,7 +961,7 @@ export function MediaLibraryPage({
                     <video
                       controls
                       autoPlay
-                      src={previewAsset.url}
+                      src={`${API_BASE}${previewAsset.url}`}
                       className="dialog-video-player"
                     />
                   </div>
@@ -1003,7 +1004,7 @@ export function MediaLibraryPage({
                       <span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span />
                     </div>
                   </div>
-                  <audio controls autoPlay src={previewAsset.url} className="dialog-audio-player" />
+                  <audio controls autoPlay src={`${API_BASE}${previewAsset.url}`} className="dialog-audio-player" />
                   <div className="dialog-meta-specs-box">
                     <div className="meta-spec-row">
                       <span>Filename:</span>
@@ -1089,7 +1090,7 @@ export function MediaLibraryPage({
               {previewAsset.type === "image" && (
                 <div className="dialog-image-layout">
                   <img
-                    src={previewAsset.url}
+                    src={`${API_BASE}${previewAsset.url}`}
                     alt={previewAsset.name}
                     className="dialog-full-image"
                   />
@@ -1121,7 +1122,7 @@ export function MediaLibraryPage({
                 )}
 
                 <a
-                  href={`/api/download/${previewAsset.name}?title=${encodeURIComponent(
+                  href={`${API_BASE}/api/download/${previewAsset.name}?title=${encodeURIComponent(
                     assetProjectMap.get(previewAsset.name) ||
                       previewAsset.name.replace(/\.[^/.]+$/, "")
                   )}`}

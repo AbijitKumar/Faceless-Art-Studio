@@ -1,4 +1,5 @@
 // Media Library API & Data Utilities for Faceless Art Studio
+import { API_BASE } from "./lib/apiBase";
 
 export type MediaType = "video" | "audio" | "subtitle" | "image";
 export type MediaCategory = "input" | "output_video" | "voiceover" | "subtitles";
@@ -47,7 +48,7 @@ export async function fetchMediaAssets(token?: string): Promise<MediaResponse> {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch("/api/media", { headers });
+  const res = await fetch(`${API_BASE}/api/media`, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch media assets: ${res.status} ${res.statusText}`);
   }
@@ -66,7 +67,7 @@ export async function uploadMediaAsset(file: File, token?: string): Promise<any>
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch("/api/upload", {
+  const res = await fetch(`${API_BASE}/api/upload`, {
     method: "POST",
     headers,
     body: formData,
@@ -84,7 +85,8 @@ export async function uploadMediaAsset(file: File, token?: string): Promise<any>
  * Fetch raw subtitle content for previewing
  */
 export async function fetchSubtitleContent(url: string): Promise<string> {
-  const res = await fetch(url);
+  const targetUrl = url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url}`;
+  const res = await fetch(targetUrl);
   if (!res.ok) {
     throw new Error(`Failed to load subtitle file: ${res.statusText}`);
   }

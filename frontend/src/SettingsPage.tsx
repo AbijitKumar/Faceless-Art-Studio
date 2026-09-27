@@ -26,6 +26,7 @@ import {
 import { useAuth } from "./auth/useAuth";
 import { useToast } from "./ToastContext";
 import { supabase } from "./lib/supabase";
+import { API_BASE } from "./lib/apiBase";
 
 interface SettingsPageProps {
   onNavigateHelp: (targetSection?: "about" | "video-flow" | "bug-report") => void;
@@ -108,7 +109,7 @@ export function SettingsPage({ onNavigateHelp, onNavigateAuth, onNavigateLegal }
     setIsDeleting(true);
     try {
       if (session?.access_token) {
-        await fetch("/api/account/cleanup", {
+        await fetch(`${API_BASE}/api/account/cleanup`, {
           method: "POST",
           headers: { Authorization: `Bearer ${session.access_token}` },
         }).catch((e) => console.warn("Backend cleanup error:", e));

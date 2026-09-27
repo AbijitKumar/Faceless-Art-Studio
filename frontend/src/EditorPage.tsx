@@ -49,6 +49,7 @@ import { TemplateConfig } from "./templates";
 import { useAuth } from "./auth/useAuth";
 import { AuthModal } from "./auth/AuthModal";
 import { useToast } from "./ToastContext";
+import { API_BASE } from "./lib/apiBase";
 
 export interface EditorPageProps {
   onBack: () => void;
@@ -205,7 +206,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     if (initialVideo) {
       setSelectedVideo(initialVideo);
       if (videoRef.current) {
-        videoRef.current.src = initialVideo.url;
+        videoRef.current.src = `${API_BASE}${initialVideo.url}`;
         videoRef.current.load();
       }
     }
@@ -295,7 +296,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     const chosen = pool[Math.floor(Math.random() * pool.length)];
     setSelectedVideo(chosen);
     if (videoRef.current) {
-      videoRef.current.src = chosen.url;
+      videoRef.current.src = `${API_BASE}${chosen.url}`;
       videoRef.current.load();
     }
   };
@@ -370,7 +371,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
       setSelectedVideo(newVideo);
       toast.success(`Uploaded ${res.name || file.name}`);
       if (videoRef.current) {
-        videoRef.current.src = newVideo.url;
+        videoRef.current.src = `${API_BASE}${newVideo.url}`;
         videoRef.current.load();
       }
     } catch (err: any) {
@@ -627,7 +628,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
 
             // Switch editor preview to the generated MP4
             if (videoRef.current) {
-              videoRef.current.src = status.result.video_url;
+              videoRef.current.src = `${API_BASE}${status.result.video_url}`;
               videoRef.current.load();
               videoRef.current.play().catch(() => {});
             }
@@ -663,7 +664,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     if (!generatedResult) return;
     const filename = generatedResult.video_url.split("/").pop() || `${generatedResult.job_id}.mp4`;
     const cleanTitle = (projectTitle.trim() || generatedResult.title || "faceless-video").replace(/[\\/*?:"<>|]/g, "_");
-    const downloadUrl = `/api/download/${filename}?title=${encodeURIComponent(cleanTitle)}`;
+    const downloadUrl = `${API_BASE}/api/download/${filename}?title=${encodeURIComponent(cleanTitle)}`;
     triggerDownload(downloadUrl, `${cleanTitle}.mp4`);
   };
 
@@ -943,7 +944,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               {generatedResult ? (
                 <video
                   ref={videoRef}
-                  src={generatedResult.video_url}
+                  src={`${API_BASE}${generatedResult.video_url}`}
                   className="editor-video-element"
                   playsInline
                   onTimeUpdate={handleTimeUpdate}
@@ -953,7 +954,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               ) : selectedVideo ? (
                 <video
                   ref={videoRef}
-                  src={selectedVideo.url}
+                  src={`${API_BASE}${selectedVideo.url}`}
                   className="editor-video-element"
                   playsInline
                   muted
@@ -1353,7 +1354,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               <video
                 controls
                 autoPlay
-                src={generatedResult.video_url}
+                src={`${API_BASE}${generatedResult.video_url}`}
                 className="success-video"
               />
             </div>

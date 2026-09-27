@@ -1,3 +1,5 @@
+import { API_BASE } from "./lib/apiBase";
+
 export interface Voice {
   shortName: string;
   friendlyName: string;
@@ -78,7 +80,7 @@ export interface JobStatus {
 }
 
 export async function fetchVoices(): Promise<Voice[]> {
-  const res = await fetch("/api/voices");
+  const res = await fetch(`${API_BASE}/api/voices`);
   if (!res.ok) {
     throw new Error(`Failed to load voices: ${res.statusText}`);
   }
@@ -87,7 +89,7 @@ export async function fetchVoices(): Promise<Voice[]> {
 }
 
 export async function fetchInputFiles(): Promise<InputFile[]> {
-  const res = await fetch("/api/input-files");
+  const res = await fetch(`${API_BASE}/api/input-files`);
   if (!res.ok) {
     throw new Error(`Failed to load source files: ${res.statusText}`);
   }
@@ -96,7 +98,7 @@ export async function fetchInputFiles(): Promise<InputFile[]> {
 }
 
 export async function fetchRandomInput(): Promise<InputFile> {
-  const res = await fetch("/api/random-input");
+  const res = await fetch(`${API_BASE}/api/random-input`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `No source videos found: ${res.statusText}`);
@@ -114,7 +116,7 @@ export async function uploadVideo(file: File, token?: string): Promise<InputFile
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch("/api/upload", {
+  const res = await fetch(`${API_BASE}/api/upload`, {
     method: "POST",
     headers,
     body: formData,
@@ -137,7 +139,7 @@ export async function startGeneration(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch("/api/generate", {
+  const res = await fetch(`${API_BASE}/api/generate`, {
     method: "POST",
     headers,
     body: JSON.stringify(req),
@@ -157,7 +159,7 @@ export async function getJobStatus(jobId: string, token?: string): Promise<JobSt
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`/api/jobs/${jobId}`, {
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
     headers,
   });
   if (!res.ok) {
