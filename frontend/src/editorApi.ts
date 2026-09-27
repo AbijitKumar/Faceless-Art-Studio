@@ -82,29 +82,37 @@ export interface JobStatus {
 export async function fetchVoices(): Promise<Voice[]> {
   const res = await fetch(`${API_BASE}/api/voices`);
   if (!res.ok) {
-    throw new Error(`Failed to load voices: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to load voices: ${res.status} ${res.statusText}`);
   }
   const data = await res.json();
-  return data.voices || [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.voices)) return data.voices;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
 }
 
 export async function fetchInputFiles(): Promise<InputFile[]> {
   const res = await fetch(`${API_BASE}/api/input-files`);
   if (!res.ok) {
-    throw new Error(`Failed to load source files: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to load source files: ${res.status} ${res.statusText}`);
   }
   const data = await res.json();
-  return data.files || [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.files)) return data.files;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
 }
 
 export async function fetchRandomInput(): Promise<InputFile> {
   const res = await fetch(`${API_BASE}/api/random-input`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `No source videos found: ${res.statusText}`);
+    throw new Error(err.error || `No source videos found: ${res.status} ${res.statusText}`);
   }
   const data = await res.json();
-  return data.file;
+  return data?.file || data;
 }
 
 export async function uploadVideo(file: File, token?: string): Promise<InputFile> {

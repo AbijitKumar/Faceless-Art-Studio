@@ -240,14 +240,21 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     fetchVoices()
       .then((data) => {
         if (!isMounted) return;
-        setVoices(data);
-        if (data.length > 0) {
-          const defaultVoice = data.find((v) => v.shortName === "en-US-AriaNeural") || data[0];
-          setSelectedVoice(defaultVoice.shortName);
+        const voiceList = Array.isArray(data) ? data : [];
+        setVoices(voiceList);
+        if (voiceList.length > 0) {
+          const defaultVoice = voiceList.find((v) => v?.shortName === "en-US-AriaNeural") || voiceList[0];
+          if (defaultVoice?.shortName) {
+            setSelectedVoice(defaultVoice.shortName);
+          }
+          setVoiceError(null);
+        } else {
+          setVoiceError("No voices available from server.");
         }
       })
       .catch((err) => {
-        if (isMounted) setVoiceError("Failed to load voices. Ensure backend server is running.");
+        console.error("Failed to load voices:", err);
+        if (isMounted) setVoiceError(err?.message || "Failed to load voices. Ensure backend server is running.");
       });
 
     // 2. Fetch real videos from input/ and select one randomly (or use initialVideo)
@@ -255,25 +262,27 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     fetchInputFiles()
       .then((files) => {
         if (!isMounted) return;
-        setAvailableVideos(files);
-        if (files.length === 0 && !initialVideo) {
+        const fileList = Array.isArray(files) ? files : [];
+        setAvailableVideos(fileList);
+        if (fileList.length === 0 && !initialVideo) {
           setSourceVideoError("No source videos are available in the input folder.");
           setSelectedVideo(null);
         } else if (!initialVideo) {
           // Pick a random video
-          const randomVideo = files[Math.floor(Math.random() * files.length)];
+          const randomVideo = fileList[Math.floor(Math.random() * fileList.length)];
           setSelectedVideo(randomVideo);
           setSourceVideoError(null);
         } else {
           // Verify if initialVideo is in the list, or keep initialVideo
-          const matched = files.find((f) => f.name === initialVideo.name || f.path === initialVideo.path);
+          const matched = fileList.find((f) => f?.name === initialVideo.name || f?.path === initialVideo.path);
           if (matched) setSelectedVideo(matched);
           else setSelectedVideo(initialVideo);
           setSourceVideoError(null);
         }
       })
       .catch((err) => {
-        if (isMounted) setSourceVideoError("Unable to connect to backend to list input videos.");
+        console.error("Failed to load source files:", err);
+        if (isMounted) setSourceVideoError(err?.message || "Unable to connect to backend to list input videos.");
       })
       .finally(() => {
         if (isMounted) setIsLoadingSource(false);
@@ -422,8 +431,9 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
 
   // ── Filter Voices by Locale ─────────────────────────────────────────────────
   const filteredVoices = useMemo(() => {
+    if (!Array.isArray(voices)) return [];
     if (!voiceLocaleFilter || voiceLocaleFilter === "ALL") return voices;
-    return voices.filter((v) => v.locale.startsWith(voiceLocaleFilter));
+    return voices.filter((v) => v?.locale?.startsWith(voiceLocaleFilter));
   }, [voices, voiceLocaleFilter]);
 
   // ── Script Statistics ───────────────────────────────────────────────────────
