@@ -64,17 +64,19 @@ async def verify_supabase_token(request: web.Request) -> tuple[bool, str | None,
 
     Error codes:
       - 'AUTH_NOT_CONFIGURED': Supabase URL or Anon Key is missing in environment
-      - 'TOKEN_MISSING': No Bearer token provided in Authorization header
+      - 'TOKEN_MISSING': No Bearer token provided in Authorization header or query param
       - 'INVALID_TOKEN': Token verification failed or token expired
     """
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         return False, "AUTH_NOT_CONFIGURED", None
 
+    token = ""
     auth_header = request.headers.get("Authorization", "").strip()
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return False, "TOKEN_MISSING", None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif "token" in request.query:
+        token = request.query.get("token", "").strip()
 
-    token = auth_header[7:].strip()
     if not token:
         return False, "TOKEN_MISSING", None
 
@@ -117,11 +119,11 @@ def get_available_input_videos() -> List[Dict[str, Any]]:
     return files
 
 
-def get_all_media_assets() -> Dict[str, Any]:
-    """Scan input and output directories and return all real creative assets."""
+def get_all_media_assets(user_id: str | None = None) -> Dict[str, Any]:
+    """Scan input and output directories and return all real creative assets, scoped to user if specified."""
     assets: List[Dict[str, Any]] = []
     
-    # 1. Input directory (source videos and images)
+    # 1. Input directory (source videos and images) - shared creative inputs
     if INPUT_DIR.exists():
         for p in sorted(INPUT_DIR.rglob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
             if not p.is_file() or p.name.startswith("."):
@@ -154,70 +156,51 @@ def get_all_media_assets() -> Dict[str, Any]:
                     "modified": int(stat.st_mtime * 1000),
                 })
 
-    # 2. Output Videos
-    output_videos_dir = OUTPUT_DIR / "videos"
-    if output_videos_dir.exists():
-        for p in sorted(output_videos_dir.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
+    # 2. Output directory - scan user-scoped folder if user_id is provided
+    search_dirs = []
+    if user_id:
+        user_dir = OUTPUT_DIR / "users" / str(user_id)
+        if user_dir.exists():
+            search_dirs.append(user_dir)
+    else:
+        # Fallback for unauthenticated legacy items if any
+        search_dirs.extend([
+            OUTPUT_DIR / "videos",
+            OUTPUT_DIR / "voiceovers",
+            OUTPUT_DIR / "subtitles",
+        ])
+
+    for base_search in search_dirs:
+        if not base_search.exists():
+            continue
+        for p in sorted(base_search.rglob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
             if not p.is_file() or p.name.startswith("."):
                 continue
             ext = p.suffix.lower()
+            rel_path = p.relative_to(BASE_DIR).as_posix()
+            stat = p.stat()
+
+            cat = "output_other"
+            m_type = None
             if ext in SUPPORTED_VIDEO_EXTS:
-                rel_path = p.relative_to(BASE_DIR).as_posix()
-                stat = p.stat()
-                assets.append({
-                    "id": f"out_vid_{safe_stem(p.name)}_{stat.st_size}",
-                    "name": p.name,
-                    "path": str(p.resolve()),
-                    "relPath": rel_path,
-                    "url": f"/{rel_path}",
-                    "category": "output_video",
-                    "type": "video",
-                    "extension": ext,
-                    "size": stat.st_size,
-                    "modified": int(stat.st_mtime * 1000),
-                })
+                cat = "output_video"
+                m_type = "video"
+            elif ext in SUPPORTED_AUDIO_EXTS:
+                cat = "voiceover"
+                m_type = "audio"
+            elif ext in SUPPORTED_SUBTITLE_EXTS:
+                cat = "subtitles"
+                m_type = "subtitle"
 
-    # 3. Output Voiceovers
-    output_voice_dir = OUTPUT_DIR / "voiceovers"
-    if output_voice_dir.exists():
-        for p in sorted(output_voice_dir.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
-            if not p.is_file() or p.name.startswith("."):
-                continue
-            ext = p.suffix.lower()
-            if ext in SUPPORTED_AUDIO_EXTS:
-                rel_path = p.relative_to(BASE_DIR).as_posix()
-                stat = p.stat()
+            if m_type:
                 assets.append({
-                    "id": f"out_aud_{safe_stem(p.name)}_{stat.st_size}",
+                    "id": f"out_{safe_stem(p.name)}_{stat.st_size}",
                     "name": p.name,
                     "path": str(p.resolve()),
                     "relPath": rel_path,
                     "url": f"/{rel_path}",
-                    "category": "voiceover",
-                    "type": "audio",
-                    "extension": ext,
-                    "size": stat.st_size,
-                    "modified": int(stat.st_mtime * 1000),
-                })
-
-    # 4. Output Subtitles
-    output_subs_dir = OUTPUT_DIR / "subtitles"
-    if output_subs_dir.exists():
-        for p in sorted(output_subs_dir.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
-            if not p.is_file() or p.name.startswith("."):
-                continue
-            ext = p.suffix.lower()
-            if ext in SUPPORTED_SUBTITLE_EXTS:
-                rel_path = p.relative_to(BASE_DIR).as_posix()
-                stat = p.stat()
-                assets.append({
-                    "id": f"out_sub_{safe_stem(p.name)}_{stat.st_size}",
-                    "name": p.name,
-                    "path": str(p.resolve()),
-                    "relPath": rel_path,
-                    "url": f"/{rel_path}",
-                    "category": "subtitles",
-                    "type": "subtitle",
+                    "category": cat,
+                    "type": m_type,
                     "extension": ext,
                     "size": stat.st_size,
                     "modified": int(stat.st_mtime * 1000),
@@ -246,7 +229,9 @@ def get_all_media_assets() -> Dict[str, Any]:
 async def get_media_library(request: web.Request) -> web.Response:
     """Return all media assets in the workspace with metadata and summary."""
     try:
-        data = get_all_media_assets()
+        is_valid, _, user_data = await verify_supabase_token(request)
+        caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+        data = get_all_media_assets(caller_user_id)
         return web.json_response(data)
     except Exception as exc:
         traceback.print_exc()
@@ -310,15 +295,8 @@ async def get_random_input(request: web.Request) -> web.Response:
 
 async def upload_video(request: web.Request) -> web.Response:
     """Handle multipart file upload for source video."""
-    is_valid, err_code, _ = await verify_supabase_token(request)
-    if err_code == "AUTH_NOT_CONFIGURED":
-        return web.json_response({
-            "error": "Authentication backend is not configured on the server. SUPABASE_URL and SUPABASE_ANON_KEY must be set."
-        }, status=503)
-    if not is_valid:
-        return web.json_response({
-            "error": "Unauthorized: A valid authenticated session is required to upload files."
-        }, status=401)
+    is_valid, _, user_data = await verify_supabase_token(request)
+    caller_user_id = user_data.get("id") if (is_valid and user_data) else None
 
     reader = await request.multipart()
     field = await reader.next()
@@ -385,13 +363,21 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
         jobs[job_id]["status"] = "processing"
         jobs[job_id]["stage"] = "preparing"
 
+        # Resolve account-scoped persistent output directory
+        user_id = payload.get("user_id")
+        if user_id:
+            user_output_dir = OUTPUT_DIR / "users" / str(user_id) / job_id
+        else:
+            user_output_dir = OUTPUT_DIR
+        user_output_dir.mkdir(parents=True, exist_ok=True)
+
         result = run_pipeline(
             text=text,
             video_path=video_path,
             voice=voice,
             whisper_model=whisper_model,
             language=language,
-            output_dir=OUTPUT_DIR,
+            output_dir=user_output_dir,
             caption_settings=caption_settings,
             video_settings=video_settings,
             stage_callback=update_stage,
@@ -485,6 +471,8 @@ async def generate_video(request: web.Request) -> web.Response:
 
     job_id = payload.get("job_id") or os.urandom(6).hex()
 
+    payload["user_id"] = caller_user_id
+
     jobs[job_id] = {
         "job_id": job_id,
         "user_id": caller_user_id,
@@ -538,20 +526,104 @@ async def get_job_status(request: web.Request) -> web.Response:
     return web.json_response(job)
 
 
+async def download_user_file(request: web.Request) -> web.Response:
+    """Safely stream/download an account-scoped file with strict ownership validation."""
+    is_valid, err_code, user_data = await verify_supabase_token(request)
+    if not is_valid:
+        return web.json_response({
+            "error": "Unauthorized: A valid session is required to download this video."
+        }, status=401)
+
+    caller_user_id = user_data.get("id") if user_data else None
+    target_user_id = request.match_info.get("user_id", "").strip()
+    job_id = request.match_info.get("job_id", "").strip()
+    raw_filename = request.match_info.get("filename", "").strip()
+
+    # Block path traversal attempts
+    safe_filename = Path(raw_filename).name
+
+    # Strict account ownership check
+    if not caller_user_id or caller_user_id != target_user_id:
+        return web.json_response({
+            "error": "Forbidden: You do not have permission to access another account's project files."
+        }, status=403)
+
+    base_user_job_dir = (OUTPUT_DIR / "users" / target_user_id / job_id).resolve()
+    candidate_paths = [
+        base_user_job_dir / "videos" / safe_filename,
+        base_user_job_dir / "voiceovers" / safe_filename,
+        base_user_job_dir / "subtitles" / safe_filename,
+        base_user_job_dir / safe_filename,
+    ]
+
+    target_path = None
+    for cand in candidate_paths:
+        if cand.exists() and cand.is_file():
+            # Confirm resolved path is inside base_user_job_dir
+            if str(cand.resolve()).startswith(str(base_user_job_dir)):
+                target_path = cand
+                break
+
+    if not target_path:
+        return web.json_response({"error": "File not found."}, status=404)
+
+    ext = target_path.suffix.lower()
+    content_types = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska",
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".srt": "text/plain; charset=utf-8",
+        ".ass": "text/plain; charset=utf-8",
+        ".vtt": "text/vtt; charset=utf-8",
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+
+    custom_title = request.query.get("title", "").strip()
+    if custom_title:
+        clean_name = re.sub(r'[\\/*?:"<>|]', "", custom_title).strip().rstrip(". ")
+        if not clean_name:
+            clean_name = target_path.stem
+        download_display_name = f"{clean_name}{ext}" if not clean_name.lower().endswith(ext) else clean_name
+    else:
+        download_display_name = safe_filename
+
+    return web.FileResponse(
+        target_path,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_display_name}"',
+            "Content-Type": content_type,
+        },
+    )
+
+
 async def download_file(request: web.Request) -> web.Response:
     """Safely stream/download any media file from approved directories."""
     filename = request.match_info.get("filename", "")
-    # Protect against path traversal
     safe_filename = Path(filename).name
 
+    is_valid, _, user_data = await verify_supabase_token(request)
+    caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+
     candidates = [
+        INPUT_DIR / safe_filename,
+        UPLOADS_DIR / safe_filename,
+    ]
+
+    if caller_user_id:
+        user_folder = OUTPUT_DIR / "users" / str(caller_user_id)
+        if user_folder.exists():
+            candidates.extend(user_folder.rglob(safe_filename))
+
+    candidates.extend([
         OUTPUT_DIR / "videos" / safe_filename,
         OUTPUT_DIR / "voiceovers" / safe_filename,
         OUTPUT_DIR / "subtitles" / safe_filename,
-        INPUT_DIR / safe_filename,
-        UPLOADS_DIR / safe_filename,
         OUTPUT_DIR / safe_filename,
-    ]
+    ])
 
     target_path = None
     for cand in candidates:
@@ -615,11 +687,12 @@ def make_app() -> web.Application:
     app.router.add_post("/api/upload", upload_video)
     app.router.add_post("/api/generate", generate_video)
     app.router.add_get("/api/jobs/{job_id}", get_job_status)
+    app.router.add_get("/api/download/{user_id}/{job_id}/{filename}", download_user_file)
     app.router.add_get("/api/download/{filename}", download_file)
 
-    # Static media routes for preview and video streaming
-    app.router.add_static("/output", OUTPUT_DIR, show_index=True)
-    app.router.add_static("/input", INPUT_DIR, show_index=True)
+    # Static media routes for preview and video streaming (show_index disabled for security)
+    app.router.add_static("/output", OUTPUT_DIR, show_index=False)
+    app.router.add_static("/input", INPUT_DIR, show_index=False)
 
     return app
 
