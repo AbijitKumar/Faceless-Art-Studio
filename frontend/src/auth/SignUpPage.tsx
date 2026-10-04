@@ -11,8 +11,9 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { signUpWithPassword, signInWithGoogle, signInWithGitHub } from "./authService";
+import { signUpWithPassword, signInWithGitHub } from "./authService";
 import { useAuth } from "./useAuth";
+import { createNotification } from "../notificationService";
 import logoSrc from "../assets/logo.png";
 
 interface SignUpPageProps {
@@ -68,6 +69,7 @@ const GitHubIcon = () => (
 export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess }) => {
   const { isConfigured, refreshSession } = useAuth();
 
+  const [googleMsg, setGoogleMsg] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,6 +112,14 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
       // Check if session was returned immediately or email confirmation is required
       if (data.session) {
         await refreshSession();
+        // Send one-time welcome notification
+        try {
+          await createNotification(data.session.user.id, {
+            title: "Welcome to Faceless Art Studio!",
+            message: "Due to Technical Errors, Video Generation on qualtities above 720p does not work. Please use the 720p option. And we welcome you to our service.",
+            type: "welcome",
+          });
+        } catch (_) { /* non-critical */ }
         if (onSuccess) onSuccess();
         else onNavigate("dashboard");
       } else {
@@ -124,13 +134,9 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
     }
   };
 
-  const handleGoogle = async () => {
+  const handleGoogle = () => {
     setErrorMsg(null);
-    try {
-      await signInWithGoogle();
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to initiate Google sign in.");
-    }
+    setGoogleMsg("Please sign in through email. the dign in through Google service is in progress and will be available pretty soon.");
   };
 
   const handleGitHub = async () => {
@@ -499,6 +505,23 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate, onSuccess })
                 GitHub
               </button>
             </div>
+            {googleMsg && (
+              <div
+                role="status"
+                style={{
+                  marginTop: 12,
+                  backgroundColor: "rgba(234, 179, 8, 0.1)",
+                  border: "1px solid rgba(234, 179, 8, 0.3)",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  color: "#FDE047",
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                }}
+              >
+                {googleMsg}
+              </div>
+            )}
           </form>
         )}
 

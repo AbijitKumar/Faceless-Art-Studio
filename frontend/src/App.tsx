@@ -393,7 +393,7 @@ function AppContent() {
           ) : page === "terms" ? (
             <TermsPage onBack={() => go("dashboard")} onNavigatePrivacy={() => go("privacy")} />
           ) : (
-            <ProgressPage page={page} onBack={() => go("dashboard")} />
+          <NotFoundPage onBack={() => go("dashboard")} />
           )}
         </Suspense>
       </div>
@@ -890,6 +890,44 @@ function ProjectsPage({
           </div>
         </div>
       )}
+    </main>
+  );
+}
+
+// ── Not Found Page (404) ──────────────────────────────────────────────────────
+function NotFoundPage({ onBack }: { onBack: () => void }) {
+  return (
+    <main className="content">
+      <div
+        className="progress-page"
+        style={{ textAlign: "center", padding: "80px 24px" }}
+      >
+        <div
+          style={{
+            fontSize: 96,
+            fontWeight: 900,
+            background: "linear-gradient(135deg, #007AFF 0%, #5856D6 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            lineHeight: 1,
+            marginBottom: 16,
+            fontFamily: "'Manrope', 'Inter', sans-serif",
+          }}
+        >
+          404
+        </div>
+        <div className="eyebrow" style={{ marginBottom: 12 }}>PAGE NOT FOUND</div>
+        <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 10 }}>
+          This page doesn&apos;t exist
+        </h1>
+        <p style={{ color: "#6B7280", maxWidth: 380, margin: "0 auto 28px", lineHeight: 1.6, fontSize: 14 }}>
+          The page you&apos;re looking for may have been moved, removed, or never existed.
+          Head back to the dashboard to continue creating.
+        </p>
+        <button className="primary" onClick={onBack}>
+          <LayoutDashboard size={17} /> Back to Dashboard
+        </button>
+      </div>
     </main>
   );
 }

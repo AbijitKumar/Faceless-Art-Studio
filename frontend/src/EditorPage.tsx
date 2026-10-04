@@ -169,7 +169,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1">(
     initialTemplate?.aspectRatio || "9:16"
   );
-  const [resolution, setResolution] = useState<"720p" | "1080p" | "4K">("1080p");
+  const [resolution, setResolution] = useState<"720p" | "1080p" | "4K">("720p");
 
   // ── Video Playback & Canvas State ───────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
