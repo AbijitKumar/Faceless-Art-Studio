@@ -9,12 +9,16 @@ export interface Voice {
 }
 
 export interface InputFile {
+  id?: string;
   name: string;
+  original_name?: string;
   path: string;
-  relPath: string;
+  relPath?: string;
+  storage_path?: string;
   url: string;
   size: number;
 }
+
 
 export interface CaptionSettings {
   enabled?: boolean;
@@ -41,6 +45,8 @@ export interface GenerateRequest {
   title: string;
   text: string;
   video_path?: string;
+  storage_path?: string;
+  asset_id?: string;
   voice: string;
   whisper_model?: string;
   language?: string;
@@ -92,8 +98,12 @@ export async function fetchVoices(): Promise<Voice[]> {
   return [];
 }
 
-export async function fetchInputFiles(): Promise<InputFile[]> {
-  const res = await fetch(`${API_BASE}/api/input-files`);
+export async function fetchInputFiles(token?: string): Promise<InputFile[]> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}/api/input-files`, { headers });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to load source files: ${res.status} ${res.statusText}`);
@@ -105,8 +115,12 @@ export async function fetchInputFiles(): Promise<InputFile[]> {
   return [];
 }
 
-export async function fetchRandomInput(): Promise<InputFile> {
-  const res = await fetch(`${API_BASE}/api/random-input`);
+export async function fetchRandomInput(token?: string): Promise<InputFile> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}/api/random-input`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `No source videos found: ${res.status} ${res.statusText}`);

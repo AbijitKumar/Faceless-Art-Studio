@@ -78,6 +78,12 @@ const FONT_OPTIONS = [
 const DEFAULT_SCRIPT =
   "AI is dramatically simple. Turn your ideas into high-impact faceless videos in seconds.";
 
+const resolveMediaUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${API_BASE}${url}`;
+};
+
 export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initialVideo }: EditorPageProps) {
   // ── Project Metadata ────────────────────────────────────────────────────────
   const [projectTitle, setProjectTitle] = useState(() => {
@@ -206,7 +212,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     if (initialVideo) {
       setSelectedVideo(initialVideo);
       if (videoRef.current) {
-        videoRef.current.src = `${API_BASE}${initialVideo.url}`;
+        videoRef.current.src = resolveMediaUrl(initialVideo.url);
         videoRef.current.load();
       }
     }
@@ -257,15 +263,15 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
         if (isMounted) setVoiceError(err?.message || "Failed to load voices. Ensure backend server is running.");
       });
 
-    // 2. Fetch real videos from input/ and select one randomly (or use initialVideo)
+    // 2. Fetch real videos from input/ or Supabase Storage and select one randomly (or use initialVideo)
     setIsLoadingSource(true);
-    fetchInputFiles()
+    fetchInputFiles(session?.access_token)
       .then((files) => {
         if (!isMounted) return;
         const fileList = Array.isArray(files) ? files : [];
         setAvailableVideos(fileList);
         if (fileList.length === 0 && !initialVideo) {
-          setSourceVideoError("No source videos are available in the input folder.");
+          setSourceVideoError("No source videos are available. Please upload a background video.");
           setSelectedVideo(null);
         } else if (!initialVideo) {
           // Pick a random video
@@ -291,7 +297,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     return () => {
       isMounted = false;
     };
-  }, [initialVideo]);
+  }, [initialVideo, session?.access_token]);
 
   // ── Pick Another Random Source Video ────────────────────────────────────────
   const handleRollRandomVideo = () => {
@@ -305,7 +311,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     const chosen = pool[Math.floor(Math.random() * pool.length)];
     setSelectedVideo(chosen);
     if (videoRef.current) {
-      videoRef.current.src = `${API_BASE}${chosen.url}`;
+      videoRef.current.src = resolveMediaUrl(chosen.url);
       videoRef.current.load();
     }
   };
@@ -370,17 +376,20 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
     try {
       const res = await uploadMediaAsset(file, session?.access_token);
       const newVideo: InputFile = {
+        id: res.id,
         name: res.name || file.name,
-        path: res.path,
-        relPath: res.relPath,
+        original_name: res.original_name || file.name,
+        path: res.storage_path || res.path,
+        relPath: res.relPath || res.storage_path || res.path,
+        storage_path: res.storage_path,
         url: res.url,
         size: res.size || file.size,
       };
       setAvailableVideos((prev) => [newVideo, ...prev.filter((v) => v.name !== newVideo.name)]);
       setSelectedVideo(newVideo);
-      toast.success(`Uploaded ${res.name || file.name}`);
+      toast.success(`Uploaded ${res.original_name || res.name || file.name}`);
       if (videoRef.current) {
-        videoRef.current.src = `${API_BASE}${newVideo.url}`;
+        videoRef.current.src = resolveMediaUrl(newVideo.url);
         videoRef.current.load();
       }
     } catch (err: any) {
@@ -572,7 +581,9 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
         job_id: jobId,
         title: cleanTitle,
         text: cleanText,
-        video_path: selectedVideo ? selectedVideo.path : "random",
+        video_path: selectedVideo ? (selectedVideo.storage_path || selectedVideo.path) : "random",
+        storage_path: selectedVideo?.storage_path,
+        asset_id: selectedVideo?.id,
         voice: selectedVoice,
         whisper_model: "base",
         caption_settings: captionSettings,
@@ -904,7 +915,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
                 </div>
                 <div className="source-video-sub">
                   {selectedVideo
-                    ? `Randomly selected from input/ (${(selectedVideo.size / (1024 * 1024)).toFixed(1)} MB)`
+                    ? `${selectedVideo.storage_path ? "Cloud Source Video" : "Selected Source"} (${(selectedVideo.size / (1024 * 1024)).toFixed(1)} MB)`
                     : "No source videos found"}
                 </div>
               </div>
@@ -989,7 +1000,7 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
               ) : selectedVideo ? (
                 <video
                   ref={videoRef}
-                  src={`${API_BASE}${selectedVideo.url}`}
+                  src={resolveMediaUrl(selectedVideo.url)}
                   className="editor-video-element"
                   playsInline
                   muted

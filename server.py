@@ -11,12 +11,24 @@ import traceback
 from typing import Any, Dict, List
 import uuid
 
+import mimetypes
 import aiohttp
 from aiohttp import web
 import edge_tts
 
 from src.pipeline import run_pipeline
 from src.utils.files import safe_stem
+from src.utils.supabase_storage import (
+    is_supabase_configured,
+    upload_to_supabase_storage,
+    create_signed_storage_url,
+    insert_media_asset_metadata,
+    query_user_media_assets,
+    delete_media_asset_record_and_file,
+    download_storage_file_sync,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_STORAGE_BUCKET,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("faceless_studio")
@@ -136,6 +148,15 @@ async def verify_supabase_token(request: web.Request) -> tuple[bool, str | None,
     except Exception as exc:
         logger.error(f"Failed to connect to Supabase Auth API: {exc}")
         return False, "INVALID_TOKEN", None
+
+
+def extract_bearer_token(request: web.Request) -> str:
+    """Extract Bearer token from Authorization header or query parameter."""
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:].strip()
+    return request.query.get("token", "").strip()
+
 
 
 def get_available_input_videos() -> List[Dict[str, Any]]:
@@ -265,11 +286,46 @@ def get_all_media_assets(user_id: str | None = None) -> Dict[str, Any]:
 
 
 async def get_media_library(request: web.Request) -> web.Response:
-    """Return all media assets in the workspace with metadata and summary."""
+    """Return all media assets in the workspace with metadata and summary, merging cloud storage assets for authenticated users."""
     try:
         is_valid, _, user_data = await verify_supabase_token(request)
         caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+        user_token = extract_bearer_token(request)
         data = get_all_media_assets(caller_user_id)
+
+        # Merge user's persistent cloud source videos from Supabase
+        if caller_user_id and is_supabase_configured():
+            try:
+                db_assets = await query_user_media_assets(str(caller_user_id), category="input", user_token=user_token)
+                for rec in db_assets:
+                    storage_path = rec.get("storage_path") or f"{caller_user_id}/{rec.get('name')}"
+                    ext = Path(rec.get("name", "")).suffix.lower()
+                    try:
+                        signed_url = await create_signed_storage_url(storage_path, expires_in_seconds=3600, user_token=user_token)
+                    except Exception:
+                        signed_url = ""
+
+                    data["assets"].insert(0, {
+                        "id": str(rec.get("id", "")),
+                        "name": rec.get("name"),
+                        "original_name": rec.get("original_name", rec.get("name")),
+                        "path": storage_path,
+                        "relPath": storage_path,
+                        "storage_path": storage_path,
+                        "url": signed_url,
+                        "category": "input",
+                        "type": "video",
+                        "extension": ext,
+                        "size": rec.get("size", 0),
+                        "modified": int(time.time() * 1000),
+                    })
+                # Recalculate summary metrics
+                data["summary"]["total"] = len(data["assets"])
+                data["summary"]["videos"] = sum(1 for a in data["assets"] if a.get("type") == "video")
+                data["summary"]["totalSizeBytes"] = sum(a.get("size", 0) for a in data["assets"])
+            except Exception as exc:
+                logger.error(f"Error merging user media assets for library: {exc}")
+
         return web.json_response(data)
     except Exception as exc:
         logger.error(f"Failed to list media assets: {exc}")
@@ -341,17 +397,86 @@ async def get_voices(request: web.Request) -> web.Response:
 
 
 async def get_input_files(request: web.Request) -> web.Response:
-    """List available video files in input directory."""
-    files = get_available_input_videos()
+    """List available video files. Authenticated users receive their persistent cloud-stored source videos."""
+    is_valid, _, user_data = await verify_supabase_token(request)
+    caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+    user_token = extract_bearer_token(request)
+
+    files = []
+    if caller_user_id and is_supabase_configured():
+        try:
+            records = await query_user_media_assets(
+                user_id=str(caller_user_id),
+                category="input",
+                user_token=user_token,
+            )
+            for rec in records:
+                storage_path = rec.get("storage_path") or f"{caller_user_id}/{rec.get('name')}"
+                try:
+                    signed_url = await create_signed_storage_url(
+                        storage_path=storage_path,
+                        expires_in_seconds=3600,
+                        user_token=user_token,
+                    )
+                except Exception as sign_err:
+                    logger.warning(f"Could not generate signed URL for {storage_path}: {sign_err}")
+                    signed_url = ""
+
+                files.append({
+                    "id": str(rec.get("id", "")),
+                    "name": rec.get("name"),
+                    "original_name": rec.get("original_name", rec.get("name")),
+                    "url": signed_url,
+                    "storage_path": storage_path,
+                    "path": storage_path,
+                    "relPath": storage_path,
+                    "size": rec.get("size", 0),
+                })
+        except Exception as exc:
+            logger.error(f"Error fetching user media assets: {exc}")
+
+    # For local development backward compatibility, also include local files if present
+    local_files = get_available_input_videos()
+    for lf in local_files:
+        if not any(f["name"] == lf["name"] for f in files):
+            files.append(lf)
+
     return web.json_response({"files": files, "count": len(files)})
 
 
 async def get_random_input(request: web.Request) -> web.Response:
-    """Select and return a random video from input directory."""
+    """Select and return a random video from cloud storage or local input directory."""
+    is_valid, _, user_data = await verify_supabase_token(request)
+    caller_user_id = user_data.get("id") if (is_valid and user_data) else None
+    user_token = extract_bearer_token(request)
+
+    if caller_user_id and is_supabase_configured():
+        try:
+            records = await query_user_media_assets(str(caller_user_id), category="input", user_token=user_token)
+            if records:
+                rec = random.choice(records)
+                storage_path = rec.get("storage_path") or f"{caller_user_id}/{rec.get('name')}"
+                signed_url = await create_signed_storage_url(storage_path, expires_in_seconds=3600, user_token=user_token)
+                return web.json_response({
+                    "file": {
+                        "id": str(rec.get("id", "")),
+                        "name": rec.get("name"),
+                        "original_name": rec.get("original_name", rec.get("name")),
+                        "url": signed_url,
+                        "storage_path": storage_path,
+                        "path": storage_path,
+                        "relPath": storage_path,
+                        "size": rec.get("size", 0),
+                    },
+                    "total_available": len(records),
+                })
+        except Exception as exc:
+            logger.error(f"Error getting random cloud asset: {exc}")
+
     files = get_available_input_videos()
     if not files:
         return web.json_response({
-            "error": "No source videos are available in the input folder."
+            "error": "No source videos are available. Please upload a background video."
         }, status=404)
 
     chosen = random.choice(files)
@@ -359,7 +484,7 @@ async def get_random_input(request: web.Request) -> web.Response:
 
 
 async def upload_video(request: web.Request) -> web.Response:
-    """Handle multipart file upload for source video with strict validation and rate limiting."""
+    """Handle multipart file upload for source video with persistent storage in Supabase."""
     is_valid, err_code, user_data = await verify_supabase_token(request)
     if err_code == "AUTH_NOT_CONFIGURED":
         return web.json_response({
@@ -371,6 +496,7 @@ async def upload_video(request: web.Request) -> web.Response:
         }, status=401)
 
     caller_user_id = user_data.get("id") if user_data else None
+    user_token = extract_bearer_token(request)
     client_ip = request.remote or "unknown"
     rate_key = f"upload_{caller_user_id or client_ip}"
     allowed, retry_after = rate_limiter.is_allowed(rate_key, RATE_LIMIT_UPLOAD, window_seconds=60)
@@ -398,52 +524,140 @@ async def upload_video(request: web.Request) -> web.Response:
             "error": f"Unsupported file type '{file_ext}'. Allowed formats: {', '.join(sorted(ALL_ALLOWED_UPLOAD_EXTS))}"
         }, status=400)
 
-    # Server-generated safe filename with unique prefix to prevent overwrite/collision
     safe_stem_part = safe_stem(Path(raw_filename).stem)[:40] or "media"
     unique_prefix = uuid.uuid4().hex[:10]
     safe_name = f"{unique_prefix}_{safe_stem_part}{file_ext}"
-    target_path = (UPLOADS_DIR / safe_name).resolve()
 
-    # Path traversal check
-    if not str(target_path).startswith(str(UPLOADS_DIR.resolve())):
-        return web.json_response({"error": "Invalid destination path."}, status=400)
-
+    # Read file content safely in memory buffer (capped by MAX_UPLOAD_SIZE_BYTES)
+    chunks = []
     size = 0
+    while True:
+        chunk = await field.read_chunk()
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > MAX_UPLOAD_SIZE_BYTES:
+            return web.json_response({
+                "error": f"File exceeds maximum allowed size of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."
+            }, status=413)
+        chunks.append(chunk)
+
+    file_bytes = b"".join(chunks)
+    detected_mime = mimetypes.guess_type(raw_filename)[0] or "video/mp4"
+
+    # If Supabase is configured, store permanently in Supabase Storage & DB
+    if is_supabase_configured():
+        storage_path = f"{caller_user_id}/{safe_name}"
+        try:
+            # 1. Upload to Supabase Storage
+            await upload_to_supabase_storage(
+                file_bytes=file_bytes,
+                storage_path=storage_path,
+                mime_type=detected_mime,
+                user_token=user_token,
+            )
+
+            # 2. Insert metadata into public.media_assets
+            db_record = await insert_media_asset_metadata(
+                record={
+                    "user_id": caller_user_id,
+                    "name": safe_name,
+                    "original_name": raw_filename,
+                    "storage_path": storage_path,
+                    "mime_type": detected_mime,
+                    "size": size,
+                    "category": "input",
+                },
+                user_token=user_token,
+            )
+
+            # 3. Create signed URL for instant frontend playback
+            signed_url = await create_signed_storage_url(
+                storage_path=storage_path,
+                expires_in_seconds=3600,
+                user_token=user_token,
+            )
+
+            record_id = str(db_record.get("id", "")) if isinstance(db_record, dict) else ""
+            return web.json_response({
+                "success": True,
+                "id": record_id,
+                "name": safe_name,
+                "original_name": raw_filename,
+                "storage_path": storage_path,
+                "path": storage_path,
+                "relPath": storage_path,
+                "type": "video",
+                "category": "input",
+                "size": size,
+                "url": signed_url,
+            })
+        except Exception as exc:
+            logger.error(f"Failed to persist upload in Supabase Storage: {exc}", exc_info=True)
+            return web.json_response({
+                "error": f"Storage upload failed: {exc}"
+            }, status=500)
+
+    # Local fallback for pure offline development
+    target_path = (UPLOADS_DIR / safe_name).resolve()
     try:
         with open(target_path, "wb") as f:
-            while True:
-                chunk = await field.read_chunk()
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_UPLOAD_SIZE_BYTES:
-                    # Abort and clean up partial file
-                    f.close()
-                    if target_path.exists():
-                        target_path.unlink(missing_ok=True)
-                    return web.json_response({
-                        "error": f"File exceeds maximum allowed size of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."
-                    }, status=413)
-                f.write(chunk)
+            f.write(file_bytes)
+        rel_path = target_path.relative_to(BASE_DIR).as_posix()
+        return web.json_response({
+            "success": True,
+            "id": safe_name,
+            "name": safe_name,
+            "original_name": raw_filename,
+            "path": str(target_path),
+            "relPath": rel_path,
+            "url": f"/{rel_path}",
+            "size": size,
+        })
     except Exception as exc:
-        if target_path.exists():
-            target_path.unlink(missing_ok=True)
-        logger.error(f"Upload write error: {exc}")
+        logger.error(f"Local upload write error: {exc}")
         return web.json_response({"error": "Failed to save uploaded file."}, status=500)
 
-    rel_path = target_path.relative_to(BASE_DIR).as_posix()
-    return web.json_response({
-        "success": True,
-        "name": safe_name,
-        "path": str(target_path),
-        "relPath": rel_path,
-        "url": f"/{rel_path}",
-        "size": size,
-    })
+
+async def delete_media_asset(request: web.Request) -> web.Response:
+    """Delete a user-owned media asset from Supabase Storage and database."""
+    is_valid, err_code, user_data = await verify_supabase_token(request)
+    if not is_valid:
+        return web.json_response({"error": "Unauthorized: Session required to delete assets."}, status=401)
+
+    caller_user_id = user_data.get("id") if user_data else None
+    user_token = extract_bearer_token(request)
+    asset_id = request.match_info.get("asset_id", "").strip()
+
+    if not asset_id:
+        return web.json_response({"error": "Asset ID is required."}, status=400)
+
+    # 1. Query user assets to find matching asset and verify ownership
+    user_assets = await query_user_media_assets(str(caller_user_id), category="input", user_token=user_token)
+    matched = next((a for a in user_assets if str(a.get("id")) == asset_id or a.get("name") == asset_id), None)
+
+    if not matched:
+        return web.json_response({"error": "Asset not found or access denied."}, status=404)
+
+    storage_path = matched.get("storage_path") or f"{caller_user_id}/{matched.get('name')}"
+    actual_id = str(matched.get("id"))
+
+    success = await delete_media_asset_record_and_file(
+        asset_id=actual_id,
+        user_id=str(caller_user_id),
+        storage_path=storage_path,
+        user_token=user_token,
+    )
+
+    if not success:
+        return web.json_response({"error": "Failed to delete media asset."}, status=500)
+
+    return web.json_response({"success": True, "message": "Asset deleted successfully."})
 
 
 def _execute_pipeline_sync(job_id: str, payload: dict):
     """Synchronous worker function running inside thread executor."""
+    temp_download_dir = None
     try:
         def update_stage(stage_name: str):
             if job_id in jobs:
@@ -451,14 +665,28 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
 
         text = payload.get("text", "").strip()
         raw_video_path = payload.get("video_path", "").strip()
+        storage_path = payload.get("storage_path")
+        auth_token = payload.get("auth_token")
         voice = payload.get("voice", "en-US-AriaNeural")
         whisper_model = payload.get("whisper_model", "base")
         language = payload.get("language", "en")
         caption_settings = payload.get("caption_settings", {})
         video_settings = payload.get("video_settings", {})
 
-        # Resolve or randomly select video path
-        if not raw_video_path or raw_video_path.lower() == "random":
+        # Resolve video path: cloud storage vs local file
+        if storage_path:
+            temp_download_dir = BASE_DIR / "output" / "temp" / job_id
+            temp_download_dir.mkdir(parents=True, exist_ok=True)
+            source_filename = Path(storage_path).name
+            temp_video_path = temp_download_dir / source_filename
+            logger.info(f"Downloading persistent source video from Supabase Storage: {storage_path}")
+            download_storage_file_sync(
+                storage_path=storage_path,
+                local_dest=temp_video_path,
+                user_token=auth_token,
+            )
+            video_path = temp_video_path
+        elif not raw_video_path or raw_video_path.lower() == "random":
             available = get_available_input_videos()
             if not available:
                 raise FileNotFoundError("No source videos are available in the input folder.")
@@ -537,6 +765,15 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
         if str(BASE_DIR) in err_msg:
             err_msg = err_msg.replace(str(BASE_DIR), "[studio_root]")
         jobs[job_id]["error"] = err_msg if DEBUG else "Video generation failed. Please check your script and settings."
+
+    finally:
+        # Clean up temporary downloaded source video
+        if temp_download_dir and temp_download_dir.exists():
+            try:
+                shutil.rmtree(temp_download_dir, ignore_errors=True)
+                logger.info(f"Cleaned up temporary source workspace: {temp_download_dir}")
+            except Exception as clean_err:
+                logger.warning(f"Error cleaning up temp directory {temp_download_dir}: {clean_err}")
 
 
 async def generate_video(request: web.Request) -> web.Response:
@@ -643,18 +880,59 @@ async def generate_video(request: web.Request) -> web.Response:
         caption_settings["shadow"] = 2
         caption_settings["max_words"] = 4
 
-    # 8. Source video path validation - prevent directory traversal / arbitrary system paths
-    available_videos = get_available_input_videos()
+    # 8. Source video path validation - support persistent Supabase cloud videos and local files
+    caller_user_id = user_data.get("id") if user_data else None
+    user_token = extract_bearer_token(request)
     raw_video_path = payload.get("video_path", "").strip()
+    storage_path = payload.get("storage_path", "").strip()
 
-    if not raw_video_path or raw_video_path.lower() == "random":
-        if not available_videos:
+    resolved_storage_path = None
+    source_name = "source_video.mp4"
+
+    # Case A: Explicit storage_path provided
+    if storage_path:
+        if not storage_path.startswith(f"{caller_user_id}/") and not SUPABASE_SERVICE_ROLE_KEY:
             return web.json_response({
-                "error": "No source videos are available in the input folder."
-            }, status=400)
-        selected = random.choice(available_videos)
-        payload["video_path"] = selected["path"]
-        source_name = selected["name"]
+                "error": "Forbidden: You do not have permission to use another account's source video."
+            }, status=403)
+        resolved_storage_path = storage_path
+        source_name = Path(storage_path).name
+
+    # Case B: raw_video_path is given as a storage path (e.g. "{user_id}/{filename}")
+    elif raw_video_path and not Path(raw_video_path).is_absolute() and "/" in raw_video_path and not raw_video_path.startswith("input"):
+        parts = raw_video_path.split("/", 1)
+        if parts[0] == str(caller_user_id) or SUPABASE_SERVICE_ROLE_KEY:
+            resolved_storage_path = raw_video_path
+            source_name = Path(raw_video_path).name
+        else:
+            return web.json_response({
+                "error": "Forbidden: You do not have permission to use another account's source video."
+            }, status=403)
+
+    # Case C: "random" or empty video_path
+    elif not raw_video_path or raw_video_path.lower() == "random":
+        user_assets = []
+        if caller_user_id and is_supabase_configured():
+            try:
+                user_assets = await query_user_media_assets(str(caller_user_id), category="input", user_token=user_token)
+            except Exception as err:
+                logger.warning(f"Failed to query user media assets during random selection: {err}")
+
+        if user_assets:
+            chosen_asset = random.choice(user_assets)
+            resolved_storage_path = chosen_asset.get("storage_path") or f"{caller_user_id}/{chosen_asset.get('name')}"
+            source_name = chosen_asset.get("name", "source_video.mp4")
+        else:
+            available_videos = get_available_input_videos()
+            if not available_videos:
+                return web.json_response({
+                    "error": "No source videos are available. Please upload a background video first."
+                }, status=400)
+            selected = random.choice(available_videos)
+            payload["video_path"] = selected["path"]
+            source_name = selected["name"]
+
+    # Case D: Local file path on disk
     else:
         v_path = Path(raw_video_path)
         if not v_path.is_absolute():
@@ -662,7 +940,6 @@ async def generate_video(request: web.Request) -> web.Response:
         else:
             v_path = v_path.resolve()
 
-        # Path restriction: MUST be in INPUT_DIR, UPLOADS_DIR, or user's directory
         allowed_parents = [
             INPUT_DIR.resolve(),
             UPLOADS_DIR.resolve(),
@@ -679,6 +956,7 @@ async def generate_video(request: web.Request) -> web.Response:
                 "error": f"Source video not found: {v_path.name}"
             }, status=400)
         source_name = v_path.name
+        payload["video_path"] = str(v_path)
 
     # 9. Job ID validation
     job_id = payload.get("job_id")
@@ -695,6 +973,8 @@ async def generate_video(request: web.Request) -> web.Response:
     payload["video_settings"] = video_settings
     payload["caption_settings"] = caption_settings
     payload["user_id"] = caller_user_id
+    payload["storage_path"] = resolved_storage_path
+    payload["auth_token"] = user_token
 
     jobs[job_id] = {
         "job_id": job_id,
@@ -886,6 +1166,20 @@ async def download_file(request: web.Request) -> web.Response:
             break
 
     if not target_path:
+        # Check if caller has this file stored in Supabase Storage
+        if caller_user_id and is_supabase_configured():
+            try:
+                user_token = extract_bearer_token(request)
+                user_assets = await query_user_media_assets(str(caller_user_id), category="input", user_token=user_token)
+                matched = next((a for a in user_assets if a.get("name") == safe_filename), None)
+                if matched:
+                    storage_path = matched.get("storage_path") or f"{caller_user_id}/{safe_filename}"
+                    signed_url = await create_signed_storage_url(storage_path, expires_in_seconds=600, user_token=user_token)
+                    raise web.HTTPFound(signed_url)
+            except web.HTTPFound:
+                raise
+            except Exception as exc:
+                logger.warning(f"Error checking cloud storage for download {safe_filename}: {exc}")
         return web.json_response({"error": "File not found."}, status=404)
 
     ext = target_path.suffix.lower()
@@ -966,6 +1260,7 @@ def make_app() -> web.Application:
     app.router.add_get("/api/input-files", get_input_files)
     app.router.add_get("/api/random-input", get_random_input)
     app.router.add_get("/api/media", get_media_library)
+    app.router.add_delete("/api/media/{asset_id}", delete_media_asset)
     app.router.add_post("/api/upload", upload_video)
     app.router.add_post("/api/generate", generate_video)
     app.router.add_get("/api/jobs/{job_id}", get_job_status)

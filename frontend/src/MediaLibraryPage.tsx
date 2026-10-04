@@ -31,6 +31,7 @@ import {
   Video,
   Volume2,
   X,
+  Trash2,
 } from "lucide-react";
 import {
   fetchMediaAssets,
@@ -45,11 +46,18 @@ import {
   parseSubtitleCues,
   SubtitleCue,
   uploadMediaAsset,
+  deleteMediaAsset,
 } from "./mediaApi";
 import { useProjects } from "./projectStore";
 import { useAuth } from "./auth/AuthContext";
 import { useToast } from "./ToastContext";
 import { API_BASE } from "./lib/apiBase";
+
+const resolveMediaUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${API_BASE}${url}`;
+};
 
 export interface MediaLibraryPageProps {
   onUseInEditor: (asset: MediaAsset) => void;
@@ -196,7 +204,7 @@ export function MediaLibraryPage({
     }
 
     setIsLoadingSubtitle(true);
-    fetchSubtitleContent(`${API_BASE}${previewAsset.url}`)
+    fetchSubtitleContent(resolveMediaUrl(previewAsset.url))
       .then((content) => {
         setRawSubtitleText(content);
         const cues = parseSubtitleCues(content, previewAsset.extension);
@@ -222,7 +230,7 @@ export function MediaLibraryPage({
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
       }
-      const audio = new Audio(`${API_BASE}${asset.url}`);
+      const audio = new Audio(resolveMediaUrl(asset.url));
       audioPlayerRef.current = audio;
 
       audio.onloadedmetadata = () => {
@@ -252,6 +260,30 @@ export function MediaLibraryPage({
       }
     };
   }, []);
+
+  // ── Delete Media Asset ───────────────────────────────────────────────────────
+  const handleDeleteAsset = async (asset: MediaAsset) => {
+    if (!window.confirm(`Are you sure you want to delete "${asset.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteMediaAsset(asset.id, session?.access_token);
+      toast.success(`Deleted ${asset.name}`);
+      setAssets((prev) => prev.filter((a) => a.id !== asset.id));
+      setSummary((prev) => ({
+        ...prev,
+        total: Math.max(0, prev.total - 1),
+        videos: asset.type === "video" ? Math.max(0, prev.videos - 1) : prev.videos,
+        totalSizeBytes: Math.max(0, prev.totalSizeBytes - asset.size),
+      }));
+      if (previewAsset?.id === asset.id) {
+        setPreviewAsset(null);
+      }
+    } catch (err: any) {
+      console.error("Failed to delete asset:", err);
+      toast.error(err.message || "Failed to delete media asset.");
+    }
+  };
 
   // ── Project Association Lookup ──────────────────────────────────────────────
   const assetProjectMap = useMemo(() => {
@@ -642,7 +674,7 @@ export function MediaLibraryPage({
                   {asset.type === "video" ? (
                     <div className="video-thumb-container">
                       <video
-                        src={`${API_BASE}${asset.url}`}
+                        src={resolveMediaUrl(asset.url)}
                         className="video-thumb-video"
                         preload="metadata"
                         muted
@@ -695,7 +727,7 @@ export function MediaLibraryPage({
                     </div>
                   ) : (
                     <div className="image-thumb-container">
-                      <img src={`${API_BASE}${asset.url}`} alt={asset.name} className="image-thumb-img" />
+                      <img src={resolveMediaUrl(asset.url)} alt={asset.name} className="image-thumb-img" />
                     </div>
                   )}
 
@@ -783,7 +815,7 @@ export function MediaLibraryPage({
                         )}
 
                         <a
-                          href={`${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
+                          href={asset.url && (asset.url.startsWith("http://") || asset.url.startsWith("https://")) ? asset.url : `${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
                             projectTitle || asset.name.replace(/\.[^/.]+$/, "")
                           )}`}
                           download={asset.name}
@@ -800,6 +832,18 @@ export function MediaLibraryPage({
                         <button onClick={() => copyToClipboard(asset.relPath, "path")}>
                           <FileCode size={13} /> Copy Path
                         </button>
+
+                        {asset.category === "input" && (
+                          <button
+                            style={{ color: "#FF4D4F" }}
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              handleDeleteAsset(asset);
+                            }}
+                          >
+                            <Trash2 size={13} /> Delete Asset
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -907,7 +951,7 @@ export function MediaLibraryPage({
                           <ExternalLink size={13} />
                         </button>
                         <a
-                          href={`${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
+                          href={asset.url && (asset.url.startsWith("http://") || asset.url.startsWith("https://")) ? asset.url : `${API_BASE}/api/download/${asset.name}?title=${encodeURIComponent(
                             projectTitle || asset.name.replace(/\.[^/.]+$/, "")
                           )}`}
                           download={asset.name}
@@ -916,6 +960,16 @@ export function MediaLibraryPage({
                         >
                           <Download size={13} />
                         </a>
+                        {asset.category === "input" && (
+                          <button
+                            className="table-quick-btn danger"
+                            onClick={() => handleDeleteAsset(asset)}
+                            title="Delete Asset"
+                            style={{ color: "#FF4D4F" }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -961,7 +1015,7 @@ export function MediaLibraryPage({
                     <video
                       controls
                       autoPlay
-                      src={`${API_BASE}${previewAsset.url}`}
+                      src={resolveMediaUrl(previewAsset.url)}
                       className="dialog-video-player"
                     />
                   </div>
@@ -1004,7 +1058,7 @@ export function MediaLibraryPage({
                       <span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span />
                     </div>
                   </div>
-                  <audio controls autoPlay src={`${API_BASE}${previewAsset.url}`} className="dialog-audio-player" />
+                  <audio controls autoPlay src={resolveMediaUrl(previewAsset.url)} className="dialog-audio-player" />
                   <div className="dialog-meta-specs-box">
                     <div className="meta-spec-row">
                       <span>Filename:</span>
@@ -1090,7 +1144,7 @@ export function MediaLibraryPage({
               {previewAsset.type === "image" && (
                 <div className="dialog-image-layout">
                   <img
-                    src={`${API_BASE}${previewAsset.url}`}
+                    src={resolveMediaUrl(previewAsset.url)}
                     alt={previewAsset.name}
                     className="dialog-full-image"
                   />

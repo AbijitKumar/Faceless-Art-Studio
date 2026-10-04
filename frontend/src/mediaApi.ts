@@ -208,3 +208,21 @@ export function parseSubtitleCues(rawText: string, extension: string): SubtitleC
 
   return cues;
 }
+
+/**
+ * Delete a user-owned media asset by ID
+ */
+export async function deleteMediaAsset(assetId: string, token?: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(assetId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to delete media asset: ${res.statusText}`);
+  }
+}
