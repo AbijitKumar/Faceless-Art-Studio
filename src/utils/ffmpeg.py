@@ -9,16 +9,22 @@ def require_ffmpeg():
         )
 
 
-def run_ffmpeg(args):
+def run_ffmpeg(args, timeout: int | None = 600):
     require_ffmpeg()
 
     command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args]
-    completed = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(
+            f"FFmpeg process exceeded maximum allowed time of {timeout}s and was terminated."
+        ) from exc
 
     if completed.returncode != 0:
         raise RuntimeError(

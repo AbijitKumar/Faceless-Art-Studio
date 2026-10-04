@@ -1,12 +1,26 @@
 import json
-import subprocess
+import os
 from pathlib import Path
+import subprocess
+import wave
 
 from src.utils.ffmpeg import run_ffmpeg
 
 
 def get_media_duration(file_path: Path) -> float:
-    """Get accurate duration of a media file in seconds using ffprobe."""
+    """Get accurate duration of a media file in seconds using wave/ffprobe."""
+    file_path = Path(file_path)
+    # Fast path for standard WAV files (no subprocess overhead)
+    if file_path.suffix.lower() == ".wav" and file_path.exists():
+        try:
+            with wave.open(str(file_path), "rb") as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                if rate > 0:
+                    return float(frames / rate)
+        except Exception:
+            pass
+
     try:
         cmd = [
             "ffprobe",
@@ -18,7 +32,7 @@ def get_media_duration(file_path: Path) -> float:
             "json",
             str(file_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         if res.returncode == 0:
             data = json.loads(res.stdout)
             return float(data.get("format", {}).get("duration", 0.0))
@@ -65,10 +79,14 @@ def render_vertical_video(
 
     w, h = get_dimensions(aspect_ratio, resolution)
     audio_duration = get_media_duration(audio_path)
+    if audio_duration <= 0.0:
+        raise ValueError(f"Could not determine valid duration for audio: {audio_path.name}")
 
+    # Optimize scaling: crop to exact target aspect ratio first, then scale directly to target w:h.
+    # This prevents the pathological 3413x1920 intermediate upscaling of 720p inputs.
     vf_filters = [
-        f"scale={w}:{h}:force_original_aspect_ratio=increase",
-        f"crop={w}:{h}",
+        f"crop='min(iw,ih*{w}/{h})':'min(ih,iw*{h}/{w})'",
+        f"scale={w}:{h}",
     ]
 
     if caption_path and Path(caption_path).exists():
@@ -77,6 +95,8 @@ def render_vertical_video(
         caption_path_str = caption_path_str.replace("'", r"\'")
         vf_filters.append(f"subtitles='{caption_path_str}'")
 
+    cpu_threads = str(min(4, max(1, os.cpu_count() or 2)))
+
     args = [
         "-stream_loop",
         "-1",
@@ -84,13 +104,8 @@ def render_vertical_video(
         str(video_path),
         "-i",
         str(audio_path),
-    ]
-
-    # Explicitly trim the final video to the exact voiceover duration
-    if audio_duration > 0:
-        args.extend(["-t", f"{audio_duration:.3f}"])
-
-    args.extend([
+        "-t",
+        f"{audio_duration:.3f}",
         "-vf",
         ",".join(vf_filters),
         "-map",
@@ -100,9 +115,11 @@ def render_vertical_video(
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "veryfast",
         "-crf",
-        "20",
+        "22",
+        "-r",
+        "30",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -111,11 +128,14 @@ def render_vertical_video(
         "192k",
         "-ar",
         "44100",
+        "-threads",
+        cpu_threads,
+        "-shortest",
         "-movflags",
         "+faststart",
         str(output_path),
-    ])
+    ]
 
-    run_ffmpeg(args)
+    run_ffmpeg(args, timeout=600)
     return output_path
-
+

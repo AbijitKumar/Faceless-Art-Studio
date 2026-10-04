@@ -574,14 +574,31 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
         text: cleanText,
         video_path: selectedVideo ? selectedVideo.path : "random",
         voice: selectedVoice,
+        whisper_model: "base",
         caption_settings: captionSettings,
         video_settings: videoSettings,
       }, session?.access_token);
 
-      // 3. Poll backend for progress
+      // 3. Poll backend for progress with timeout protection
+      let pollAttempts = 0;
+      let consecutiveErrors = 0;
+      const MAX_POLL_ATTEMPTS = 400; // 400 * 1.5s = 10 minutes max
+
       const pollInterval = setInterval(async () => {
+        pollAttempts++;
+        if (pollAttempts > MAX_POLL_ATTEMPTS) {
+          clearInterval(pollInterval);
+          setIsGenerating(false);
+          const timeoutMsg = "Video generation timed out after 10 minutes. The server may be under high load.";
+          setGenerationError(timeoutMsg);
+          toast.error(timeoutMsg);
+          projectStore.updateProject(jobId, { status: "failed", error: timeoutMsg });
+          return;
+        }
+
         try {
           const status = await getJobStatus(jobId, session?.access_token);
+          consecutiveErrors = 0;
           setGenerationStage(status.stage);
 
           if (status.status === "completed" && status.result) {
@@ -654,7 +671,15 @@ export function EditorPage({ onBack, onNavigateProjects, initialTemplate, initia
             });
           }
         } catch (pollErr: any) {
-          console.error("Polling error:", pollErr);
+          consecutiveErrors++;
+          console.error(`Polling error (${consecutiveErrors}/10):`, pollErr);
+          if (consecutiveErrors >= 10) {
+            clearInterval(pollInterval);
+            setIsGenerating(false);
+            const netMsg = "Lost connection to the generation server. Please verify your network and backend status.";
+            setGenerationError(netMsg);
+            toast.error(netMsg);
+          }
         }
       }, 1500);
     } catch (err: any) {

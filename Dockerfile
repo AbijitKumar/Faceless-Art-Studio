@@ -30,6 +30,10 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download Faster-Whisper base model weights into container layer so
+# generation never stalls waiting for Hugging Face network downloads at runtime.
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
+
 # -- Application code -----------------------------------------
 COPY server.py   ./
 COPY main.py     ./

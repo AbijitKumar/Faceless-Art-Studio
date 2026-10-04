@@ -1,6 +1,26 @@
+import os
 from pathlib import Path
+import threading
 
 from faster_whisper import WhisperModel
+
+_MODEL_CACHE: dict[str, WhisperModel] = {}
+_MODEL_LOCK = threading.Lock()
+
+
+def get_whisper_model(model_size: str = "base") -> WhisperModel:
+    """Get or load a cached Faster-Whisper model singleton."""
+    with _MODEL_LOCK:
+        if model_size not in _MODEL_CACHE:
+            threads = min(4, max(1, os.cpu_count() or 2))
+            _MODEL_CACHE[model_size] = WhisperModel(
+                model_size,
+                device="auto",
+                compute_type="int8",
+                cpu_threads=threads,
+                num_workers=1,
+            )
+        return _MODEL_CACHE[model_size]
 
 
 def _format_srt_time(seconds: float) -> str:
@@ -22,7 +42,7 @@ def _format_srt_time(seconds: float) -> str:
 def generate_srt(
     audio_path: Path,
     output_path: Path,
-    model_size: str = "small",
+    model_size: str = "base",
     language: str = "en",
 ):
     """
@@ -30,19 +50,12 @@ def generate_srt(
 
     Each spoken word receives its own start/end timestamp.
     """
-
-    print(f"Loading Whisper model: {model_size}")
-
-    model = WhisperModel(
-        model_size,
-        device="auto",
-        compute_type="int8",
-    )
+    model = get_whisper_model(model_size)
 
     segments, _ = model.transcribe(
         str(audio_path),
         language=language,
-        beam_size=5,
+        beam_size=1,
         vad_filter=True,
         word_timestamps=True,
     )

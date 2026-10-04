@@ -452,7 +452,7 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
         text = payload.get("text", "").strip()
         raw_video_path = payload.get("video_path", "").strip()
         voice = payload.get("voice", "en-US-AriaNeural")
-        whisper_model = payload.get("whisper_model", "small")
+        whisper_model = payload.get("whisper_model", "base")
         language = payload.get("language", "en")
         caption_settings = payload.get("caption_settings", {})
         video_settings = payload.get("video_settings", {})
@@ -525,6 +525,7 @@ def _execute_pipeline_sync(job_id: str, payload: dict):
             "duration_sec": exact_duration_sec,
             "resolution": video_settings.get("resolution", "1080p"),
             "aspect_ratio": video_settings.get("aspect_ratio", "9:16"),
+            "timings": result.get("timings", {}),
         }
 
     except Exception as exc:
@@ -586,9 +587,9 @@ async def generate_video(request: web.Request) -> web.Response:
         voice = "en-US-AriaNeural"
 
     # 4. Whisper model validation
-    whisper_model = payload.get("whisper_model", "small")
+    whisper_model = payload.get("whisper_model", "base")
     if whisper_model not in {"tiny", "base", "small", "medium", "large"}:
-        whisper_model = "small"
+        whisper_model = "base"
 
     # 5. Language validation
     language = payload.get("language", "en")
